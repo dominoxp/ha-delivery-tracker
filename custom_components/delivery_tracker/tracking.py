@@ -7,7 +7,9 @@ ob eine Zeichenfolge als Trackingnummer durchgeht:
 
 1. **Pruefziffer** — wo der Zusteller eine vorsieht, muss sie stimmen. Das ist
    das einzige harte Kriterium; ohne es produziert der generische Fallback aus
-   Step 1.4 zu viele Treffer.
+   Step 1.4 zu viele Treffer. Welches Verfahren gilt, sagt das Plugin ueber
+   seine `rules.yaml`: Hier stehen nur die Rechenvorschriften, nicht die
+   Zuordnung „Format X gehoert Zusteller Y".
 2. **Kontext** — was unmittelbar vor der Fundstelle steht. „Sendungsnummer:" ist
    ein Ja, „Rechnungsnummer:" ein Nein. Bestellnummern sehen Trackingnummern zum
    Verwechseln aehnlich; unterscheidbar sind sie nur am Umfeld.
@@ -19,7 +21,7 @@ ob eine Zeichenfolge als Trackingnummer durchgeht:
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
@@ -144,9 +146,6 @@ _ALNUM: Final = re.compile(r"^[0-9A-Z]+$")
 
 # UPS: `1Z` + 16 Zeichen, das letzte davon die Pruefziffer.
 _UPS: Final = re.compile(r"^1Z[0-9A-Z]{16}$")
-# DHL-Sendungsnummer: NVE/SSCC mit vorangestelltem „00" — 20 Stellen und damit
-# ein Format, das kein anderer hier unterstuetzter Zusteller verwendet.
-_DHL_NVE: Final = re.compile(r"^00\d{18}$")
 
 
 class ChecksumResult(StrEnum):
@@ -161,17 +160,19 @@ class ChecksumResult(StrEnum):
 
 
 class TrackingChecksum(StrEnum):
-    """Welches Pruefverfahren ein Carrier-Plugin anwenden laesst."""
+    """Ein Pruefverfahren, das ein Carrier-Plugin anwenden laesst.
 
-    AUTO = "auto"
-    """Nur eindeutig erkennbare Formate pruefen (Standard)."""
-    NONE = "none"
-    """Nicht pruefen — fuer Zusteller ohne Pruefziffer."""
+    Welches Verfahren zu welcher Nummer gehoert, ist Wissen des Zustellers und
+    steht deshalb in seiner `rules.yaml` — dieses Modul stellt nur die
+    Rechenvorschriften bereit und wendet an, was ihm genannt wird.
+    """
+
     UPS = "ups"
+    """`1Z` + 16 Zeichen; Stellen an gerader Position zaehlen doppelt."""
     DEUTSCHE_POST = "deutsche_post"
     """Leitcode (14 Stellen) und Identcode (12 Stellen), Gewichtung 4/9."""
     GS1 = "gs1"
-    """NVE/SSCC, Gewichtung 3/1 von rechts."""
+    """NVE/SSCC (18 oder 20 Stellen), Gewichtung 3/1 von rechts."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,32 +280,36 @@ def _gs1_result(number: str) -> ChecksumResult:
     return _check(number[:-1], number[-1], gs1_check_digit(number[:-1]))
 
 
-def checksum_result(
-    number: str, scheme: TrackingChecksum = TrackingChecksum.AUTO
-) -> ChecksumResult:
-    """Die Pruefziffer einer normalisierten Nummer bewerten.
+_CHECKS: Final[dict[TrackingChecksum, Callable[[str], ChecksumResult]]] = {
+    TrackingChecksum.UPS: _ups_result,
+    TrackingChecksum.DEUTSCHE_POST: _deutsche_post_result,
+    TrackingChecksum.GS1: _gs1_result,
+}
 
-    `AUTO` prueft bewusst nur Formate, die keinem anderen Zusteller gehoeren
-    koennen: UPS-Nummern beginnen mit `1Z`, DHL-Sendungsnummern sind 20-stellige
-    NVE. Zwoelf- und vierzehnstellige Ziffernfolgen nutzen dagegen mehrere
-    Zusteller mit unterschiedlichen Verfahren — dort muss das Plugin sein
-    Verfahren in der `rules.yaml` benennen, sonst wuerden gueltige Nummern
-    faelschlich verworfen.
+
+def checksum_result(number: str, schemes: Sequence[TrackingChecksum] = ()) -> ChecksumResult:
+    """Eine normalisierte Nummer gegen die genannten Verfahren pruefen.
+
+    Ohne Verfahren wird nicht geprueft — dieses Modul raet nie selbst, welches
+    Format zu welchem Zusteller gehoert. Das steht in der `rules.yaml` des
+    Plugins; nur der generische Fallback aus Step 1.4 nennt mehrere Verfahren
+    und laesst sie der Reihe nach probieren.
+
+    Passt ein Verfahren nicht zum Format der Nummer, haelt es sich heraus. Sagt
+    eines VALID, gilt das: Ein Format, das mehrere Verfahren beanspruchen, soll
+    nicht am strengsten von ihnen scheitern.
     """
-    if not number or scheme is TrackingChecksum.NONE:
+    if not number:
         return ChecksumResult.UNKNOWN
-    if scheme is TrackingChecksum.UPS:
-        return _ups_result(number)
-    if scheme is TrackingChecksum.DEUTSCHE_POST:
-        return _deutsche_post_result(number)
-    if scheme is TrackingChecksum.GS1:
-        return _gs1_result(number)
 
-    if _UPS.match(number):
-        return _ups_result(number)
-    if _DHL_NVE.match(number):
-        return _gs1_result(number)
-    return ChecksumResult.UNKNOWN
+    verdict = ChecksumResult.UNKNOWN
+    for scheme in schemes:
+        result = _CHECKS[scheme](number)
+        if result is ChecksumResult.VALID:
+            return ChecksumResult.VALID
+        if result is ChecksumResult.INVALID:
+            verdict = ChecksumResult.INVALID
+    return verdict
 
 
 # ----------------------------------------------------------------------
@@ -386,7 +391,7 @@ def iter_candidates(
     text: str,
     patterns: Sequence[re.Pattern[str]],
     *,
-    scheme: TrackingChecksum = TrackingChecksum.AUTO,
+    schemes: Sequence[TrackingChecksum] = (),
 ) -> Iterator[TrackingCandidate]:
     """Alle Fundstellen der Muster in Text und Links, mit ihrer Bewertung.
 
@@ -395,13 +400,13 @@ def iter_candidates(
     """
     url_values = list(iter_url_values(text))
     for pattern in patterns:
-        yield from _candidates_in_text(text, pattern, scheme)
+        yield from _candidates_in_text(text, pattern, schemes)
         for value, from_param in url_values:
-            yield from _candidates_in_url(value, pattern, scheme, from_param=from_param)
+            yield from _candidates_in_url(value, pattern, schemes, from_param=from_param)
 
 
 def _candidates_in_text(
-    text: str, pattern: re.Pattern[str], scheme: TrackingChecksum
+    text: str, pattern: re.Pattern[str], schemes: Sequence[TrackingChecksum]
 ) -> Iterator[TrackingCandidate]:
     """Fundstellen eines Musters im Fliesstext, bewertet nach ihrem Umfeld."""
     for match in pattern.finditer(text):
@@ -410,13 +415,17 @@ def _candidates_in_text(
             yield TrackingCandidate(
                 number=number,
                 raw=raw,
-                checksum=checksum_result(number, scheme),
+                checksum=checksum_result(number, schemes),
                 context=context_score(text, position),
             )
 
 
 def _candidates_in_url(
-    value: str, pattern: re.Pattern[str], scheme: TrackingChecksum, *, from_param: bool
+    value: str,
+    pattern: re.Pattern[str],
+    schemes: Sequence[TrackingChecksum],
+    *,
+    from_param: bool,
 ) -> Iterator[TrackingCandidate]:
     """Fundstellen eines Musters in einem Linkbestandteil.
 
@@ -429,7 +438,7 @@ def _candidates_in_url(
             yield TrackingCandidate(
                 number=number,
                 raw=value,
-                checksum=checksum_result(number, scheme),
+                checksum=checksum_result(number, schemes),
                 context=1 if from_param else 0,
                 from_url=True,
             )
@@ -439,7 +448,7 @@ def find_tracking_numbers(
     text: str,
     patterns: Sequence[re.Pattern[str]],
     *,
-    scheme: TrackingChecksum = TrackingChecksum.AUTO,
+    schemes: Sequence[TrackingChecksum] = (),
     require_context: bool = False,
     limit: int = MAX_TRACKING_NUMBERS,
 ) -> list[str]:
@@ -453,7 +462,7 @@ def find_tracking_numbers(
         return []
 
     found: dict[str, TrackingCandidate] = {}
-    for candidate in iter_candidates(text, patterns, scheme=scheme):
+    for candidate in iter_candidates(text, patterns, schemes=schemes):
         if not candidate.is_plausible:
             continue
         if (

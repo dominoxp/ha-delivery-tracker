@@ -33,7 +33,7 @@ match:
 tracking:
   patterns: ["\\\\b(AC\\\\d{8})\\\\b"]
   url: "https://acme.example/{tracking_number}"
-  checksum: deutsche_post
+  checksum: [deutsche_post, gs1]
   require_context: true
 status_map:
   - status: delivered
@@ -63,8 +63,8 @@ def test_minimale_regeln_haben_leere_defaults():
     assert rules.from_domains == ()
     assert rules.newsletter_patterns == ()
     assert rules.status_map == ()
-    # Ohne Angabe wird nur geprueft, was sich zweifelsfrei zuordnen laesst.
-    assert rules.checksum is TrackingChecksum.AUTO
+    # Ohne Angabe wird nicht geprueft — der Kern raet kein Verfahren.
+    assert rules.checksum == ()
     assert rules.require_context is False
     assert rules.tracking_url("AC12345678") is None
     # Alle Extraktionsfelder existieren, auch wenn `fields` fehlt.
@@ -79,7 +79,7 @@ def test_vollstaendige_regeln_werden_normalisiert():
     assert rules.from_domains == ("acme.com", "acme.de")
     assert rules.score_bonus == -5
     assert rules.priority == 7
-    assert rules.checksum is TrackingChecksum.DEUTSCHE_POST
+    assert rules.checksum == (TrackingChecksum.DEUTSCHE_POST, TrackingChecksum.GS1)
     assert rules.require_context is True
     assert rules.newsletter_patterns[0].search("Unser ANGEBOT DER WOCHE")
     assert rules.status_map[0].status is ShipmentStatus.DELIVERED
@@ -119,10 +119,17 @@ def test_unbekannter_status_wird_abgelehnt():
     assert "out_for_delivery" in message
 
 
+def test_einzelnes_pruefverfahren_wird_eingepackt():
+    """Der haeufigste Fall ist genau ein Verfahren — dann ohne Listen-Syntax."""
+    rules = _rules("carrier: acme\nname: ACME\ntracking:\n  checksum: ups\n")
+
+    assert rules.checksum == (TrackingChecksum.UPS,)
+
+
 def test_unbekanntes_pruefverfahren_wird_abgelehnt():
     """Ein Tippfehler beim Verfahren wuerde sonst still alle Pruefungen abschalten."""
     with pytest.raises(RulesError) as err:
-        _rules("carrier: acme\nname: ACME\ntracking:\n  checksum: luhn\n")
+        _rules("carrier: acme\nname: ACME\ntracking:\n  checksum: [luhn]\n")
 
     message = str(err.value)
     assert "unbekanntes Pruefverfahren" in message

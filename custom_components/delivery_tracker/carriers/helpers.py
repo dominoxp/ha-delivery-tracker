@@ -137,7 +137,7 @@ def extract_tracking_numbers(rules: CarrierRules, mail: MailMessage) -> list[str
     return find_tracking_numbers(
         mail.searchable_text,
         rules.tracking_patterns,
-        scheme=rules.checksum,
+        schemes=rules.checksum,
         require_context=rules.require_context,
     )
 

@@ -36,6 +36,14 @@ NVE_KAPUTT = "00340434161094015903"
 LEITCODE_KAPUTT = "12345678901237"
 IDENTCODE_KAPUTT = "563322110043"
 
+# So sieht die Konfiguration des generischen Fallbacks aus 1.4 aus: Er kennt den
+# Zusteller nicht und muss deshalb alle Verfahren zugleich anbieten.
+ALLE_VERFAHREN = [
+    TrackingChecksum.UPS,
+    TrackingChecksum.DEUTSCHE_POST,
+    TrackingChecksum.GS1,
+]
+
 EX_NUMMER = re.compile(r"\b(EX\d{10}DE)\b", re.IGNORECASE)
 # Bewusst weit — so sieht der generische Fallback aus Step 1.4 aus.
 GENERISCH = re.compile(r"\b([A-Z]{0,3}\d[A-Z0-9]{7,19})\b", re.IGNORECASE)
@@ -73,51 +81,56 @@ def test_normalisierung(eingabe: str, erwartet: str):
 @pytest.mark.parametrize("nummer", [UPS_OK, UPS_OK_2])
 def test_ups_pruefziffer_akzeptiert_gueltige_nummern(nummer: str):
     """Eine gueltige UPS-Nummer muss erkannt werden — sonst geht sie verloren."""
-    assert checksum_result(nummer) is ChecksumResult.VALID
-    assert checksum_result(nummer, TrackingChecksum.UPS) is ChecksumResult.VALID
+    assert checksum_result(nummer, [TrackingChecksum.UPS]) is ChecksumResult.VALID
 
 
 @pytest.mark.parametrize("nummer", [UPS_KAPUTT, UPS_KAPUTT_2])
 def test_ups_pruefziffer_lehnt_verfaelschte_nummern_ab(nummer: str):
     """Eine einzige falsche Stelle muss auffallen."""
-    assert checksum_result(nummer) is ChecksumResult.INVALID
+    assert checksum_result(nummer, [TrackingChecksum.UPS]) is ChecksumResult.INVALID
 
 
 def test_dhl_nve_pruefziffer():
     """Die 20-stellige DHL-Sendungsnummer ist eine NVE mit GS1-Pruefziffer."""
-    assert checksum_result(NVE_OK) is ChecksumResult.VALID
-    assert checksum_result(NVE_KAPUTT) is ChecksumResult.INVALID
+    schemes = [TrackingChecksum.GS1]
+
+    assert checksum_result(NVE_OK, schemes) is ChecksumResult.VALID
+    assert checksum_result(NVE_KAPUTT, schemes) is ChecksumResult.INVALID
 
 
 def test_deutsche_post_leitcode_und_identcode():
     """Leitcode (14) und Identcode (12) nutzen die Gewichtung 4/9."""
-    scheme = TrackingChecksum.DEUTSCHE_POST
+    schemes = [TrackingChecksum.DEUTSCHE_POST]
 
-    assert checksum_result(LEITCODE_OK, scheme) is ChecksumResult.VALID
-    assert checksum_result(LEITCODE_KAPUTT, scheme) is ChecksumResult.INVALID
-    assert checksum_result(IDENTCODE_OK, scheme) is ChecksumResult.VALID
-    assert checksum_result(IDENTCODE_KAPUTT, scheme) is ChecksumResult.INVALID
-
-
-def test_auto_prueft_mehrdeutige_formate_nicht():
-    """Zwoelfstellige Ziffernfolgen nutzen mehrere Zusteller mit eigenen Verfahren.
-
-    Wuerde `auto` hier die Deutsche-Post-Regel anlegen, verwuerfe die Integration
-    gueltige DPD- und GLS-Nummern.
-    """
-    assert checksum_result(LEITCODE_KAPUTT) is ChecksumResult.UNKNOWN
-    assert checksum_result(IDENTCODE_KAPUTT) is ChecksumResult.UNKNOWN
+    assert checksum_result(LEITCODE_OK, schemes) is ChecksumResult.VALID
+    assert checksum_result(LEITCODE_KAPUTT, schemes) is ChecksumResult.INVALID
+    assert checksum_result(IDENTCODE_OK, schemes) is ChecksumResult.VALID
+    assert checksum_result(IDENTCODE_KAPUTT, schemes) is ChecksumResult.INVALID
 
 
 def test_ohne_verfahren_wird_nicht_geprueft():
-    """`none` schaltet die Pruefung ab — fuer Zusteller ganz ohne Pruefziffer."""
-    assert checksum_result(UPS_KAPUTT, TrackingChecksum.NONE) is ChecksumResult.UNKNOWN
+    """Der Standard: Wer kein Verfahren nennt, bekommt keine Pruefung.
+
+    Der Kern raet bewusst nicht selbst, welches Format zu welchem Verfahren
+    gehoert — zwoelfstellige Ziffernfolgen nutzen DHL, DPD und GLS mit
+    verschiedenen Verfahren, ein geratenes wuerde gueltige Nummern verwerfen.
+    """
+    assert checksum_result(UPS_KAPUTT) is ChecksumResult.UNKNOWN
+    assert checksum_result(LEITCODE_KAPUTT) is ChecksumResult.UNKNOWN
+
+
+def test_nicht_passendes_verfahren_haelt_sich_heraus():
+    """Nur so kann der generische Fallback aus 1.4 alle Verfahren zugleich nennen."""
+    assert checksum_result(UPS_OK, ALLE_VERFAHREN) is ChecksumResult.VALID
+    assert checksum_result(NVE_OK, ALLE_VERFAHREN) is ChecksumResult.VALID
+    assert checksum_result(LEITCODE_OK, ALLE_VERFAHREN) is ChecksumResult.VALID
+    assert checksum_result(UPS_KAPUTT, ALLE_VERFAHREN) is ChecksumResult.INVALID
 
 
 def test_unbekanntes_format_bleibt_unbewertet():
     """Kein Verfahren zu kennen ist kein Ablehnungsgrund."""
-    assert checksum_result("EX1234567890DE") is ChecksumResult.UNKNOWN
-    assert checksum_result("") is ChecksumResult.UNKNOWN
+    assert checksum_result("EX1234567890DE", ALLE_VERFAHREN) is ChecksumResult.UNKNOWN
+    assert checksum_result("", ALLE_VERFAHREN) is ChecksumResult.UNKNOWN
 
 
 # ----------------------------------------------------------------------
@@ -168,14 +181,21 @@ def test_gueltige_pruefziffer_schlaegt_schlechten_kontext():
     """Was die Pruefziffer belegt, kippt kein missverstaendliches Umfeld."""
     text = f"Rechnungsnummer: {UPS_OK}"
 
-    assert find_tracking_numbers(text, [GENERISCH]) == [UPS_OK]
+    assert find_tracking_numbers(text, [GENERISCH], schemes=ALLE_VERFAHREN) == [UPS_OK]
 
 
 def test_falsche_pruefziffer_verwirft_trotz_gutem_kontext():
     """Die Pruefziffer ist das harte Kriterium."""
     text = f"Sendungsnummer: {UPS_KAPUTT}"
 
-    assert find_tracking_numbers(text, [GENERISCH]) == []
+    assert find_tracking_numbers(text, [GENERISCH], schemes=ALLE_VERFAHREN) == []
+
+
+def test_ohne_verfahren_entscheidet_allein_der_kontext():
+    """Der Regelfall eines Carrier-Plugins: kein Verfahren, aber enge Muster."""
+    text = f"Sendungsnummer: {UPS_KAPUTT}"
+
+    assert find_tracking_numbers(text, [GENERISCH]) == [UPS_KAPUTT]
 
 
 def test_nummer_aus_url_parameter():

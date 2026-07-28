@@ -106,12 +106,24 @@ def _carrier_id(value: Any) -> str:
 
 
 def _checksum(value: Any) -> TrackingChecksum:
-    """Das Pruefziffernverfahren des Zustellers auswaehlen."""
+    """Ein Pruefziffernverfahren benennen."""
     try:
         return TrackingChecksum(str(value))
     except ValueError as err:
         allowed = ", ".join(scheme.value for scheme in TrackingChecksum)
         raise vol.Invalid(f"unbekanntes Pruefverfahren {value!r} (erlaubt: {allowed})") from err
+
+
+def _checksum_list(value: Any) -> list[TrackingChecksum]:
+    """Die Pruefverfahren eines Zustellers; ein einzelner Wert wird eingepackt.
+
+    Leer bedeutet „keine Pruefung". Das ist Absicht: Welches Format zu welchem
+    Verfahren gehoert, weiss nur der Zusteller — der Kern raet nie selbst.
+    """
+    if value is None:
+        return []
+    items = value if isinstance(value, list) else [value]
+    return [_checksum(item) for item in items]
 
 
 def _url_template(value: Any) -> str | None:
@@ -143,7 +155,7 @@ _TRACKING_SCHEMA: Final = vol.Schema(
     {
         vol.Optional("patterns", default=list): _regex_list,
         vol.Optional("url", default=None): _url_template,
-        vol.Optional("checksum", default=TrackingChecksum.AUTO): _checksum,
+        vol.Optional("checksum", default=list): _checksum_list,
         vol.Optional("require_context", default=False): bool,
     }
 )
@@ -207,7 +219,8 @@ class CarrierRules:
     """Trifft eines dieser Muster, ist die Mail Werbung — das Plugin haelt sich raus."""
     tracking_patterns: tuple[re.Pattern[str], ...] = ()
     tracking_url_template: str | None = None
-    checksum: TrackingChecksum = TrackingChecksum.AUTO
+    checksum: tuple[TrackingChecksum, ...] = ()
+    """Pruefverfahren, die auf die Nummern dieses Zustellers angewendet werden."""
     require_context: bool = False
     """Verlangt ein ankuendigendes Wort an der Fundstelle — fuer weite Muster."""
     status_map: tuple[StatusRule, ...] = ()
@@ -244,7 +257,7 @@ def _to_rules(data: Mapping[str, Any]) -> CarrierRules:
         newsletter_patterns=tuple(match["newsletter_patterns"]),
         tracking_patterns=tuple(tracking["patterns"]),
         tracking_url_template=tracking["url"],
-        checksum=tracking["checksum"],
+        checksum=tuple(tracking["checksum"]),
         require_context=tracking["require_context"],
         status_map=tuple(
             StatusRule(status=rule["status"], patterns=tuple(rule["patterns"]))

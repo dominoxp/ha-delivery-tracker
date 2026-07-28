@@ -61,16 +61,20 @@ tracking:
     - "\\b(EX\\d{10}DE)\\b"
   # Vorlage der Sendungsverfolgungs-URL. Muss {tracking_number} enthalten.
   url: "https://track.example.com/de/{tracking_number}"
-  # Pruefziffernverfahren des Zustellers:
-  #   auto           nur eindeutige Formate pruefen (UPS `1Z…`, 20-stellige NVE)
-  #   none           keine Pruefung
-  #   ups            UPS-Verfahren
+  # Pruefziffernverfahren dieses Zustellers — eines oder mehrere von:
+  #   ups            UPS-Verfahren (`1Z` + 16 Zeichen)
   #   deutsche_post  Leitcode (14 Stellen) / Identcode (12 Stellen), Gewichte 4/9
-  #   gs1            NVE/SSCC, Gewichte 3/1
-  # Zwoelf- und vierzehnstellige Ziffernfolgen nutzen mehrere Zusteller mit
-  # verschiedenen Verfahren — dort muss das Plugin sein Verfahren benennen,
-  # sonst wuerde `auto` gueltige Nummern verwerfen.
-  checksum: auto
+  #   gs1            NVE/SSCC (18 oder 20 Stellen), Gewichte 3/1
+  #
+  # Ohne Angabe wird nicht geprueft. Der Kern raet bewusst nicht selbst, welches
+  # Format zu welchem Verfahren gehoert: Zwoelf- und vierzehnstellige
+  # Ziffernfolgen nutzen DHL, DPD und GLS mit *verschiedenen* Verfahren — ein
+  # geratenes Verfahren wuerde gueltige Nummern verwerfen. Nur der generische
+  # Fallback nennt mehrere Verfahren, weil das Raten dort seine Aufgabe ist.
+  #
+  # Passt ein Verfahren nicht zum Format der Nummer, haelt es sich heraus; eine
+  # falsche Pruefziffer dagegen verwirft die Nummer endgueltig.
+  checksum: []
   # Verlangt zusaetzlich ein ankuendigendes Wort an der Fundstelle
   # („Sendungsnummer:", „Paket verfolgen") oder eine stimmende Pruefziffer.
   # Fuer weite Muster Pflicht, sonst wird jede Bestellnummer zur Sendung.
