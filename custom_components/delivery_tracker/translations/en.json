@@ -1,0 +1,16 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Delivery Tracker",
+        "description": "Give the integration a name. Mailboxes, destinations and API sources are added afterwards.",
+        "data": {
+          "name": "Name"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Delivery Tracker is already set up."
+    }
+  }
+}

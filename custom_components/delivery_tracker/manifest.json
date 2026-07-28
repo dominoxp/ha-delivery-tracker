@@ -1,0 +1,13 @@
+{
+  "domain": "delivery_tracker",
+  "name": "Delivery Tracker",
+  "codeowners": ["@dominoxp"],
+  "config_flow": true,
+  "documentation": "https://github.com/dominoxp/ha-delivery-tracker",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/dominoxp/ha-delivery-tracker/issues",
+  "requirements": ["aioimaplib==2.0.1"],
+  "single_config_entry": true,
+  "version": "0.0.0-dev"
+}

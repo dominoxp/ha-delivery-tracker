@@ -1,0 +1,23 @@
+# Testumgebung der Integration.
+#
+# Home Assistant laesst sich seit 2025.10 nicht mehr unter Windows importieren
+# (`homeassistant/runner.py` importiert die Unix-Module `fcntl` und `resource`).
+# pytest laeuft deshalb im Container — dieselbe Plattform wie die GitHub-CI.
+FROM python:3.14-slim
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Nur die pyproject.toml kopieren, damit der Layer mit den Abhaengigkeiten im Cache
+# bleibt, solange sich die Abhaengigkeiten nicht aendern. README und Quellcode kommen
+# zur Laufzeit per Bind-Mount nach /app; fuer den Build genuegen Platzhalter.
+COPY pyproject.toml ./
+RUN touch README.md \
+    && mkdir -p custom_components/delivery_tracker \
+    && touch custom_components/delivery_tracker/__init__.py \
+    && pip install --no-cache-dir -e ".[dev]"
+
+CMD ["pytest", "-q"]

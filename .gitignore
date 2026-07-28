@@ -1,0 +1,20 @@
+setup-docs/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Card-Toolchain
+card/node_modules/
+card/dist/
+
+# Editor / OS
+.idea/
+.vscode/
+Thumbs.db

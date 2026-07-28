@@ -1,0 +1,13 @@
+# Der Quellcode kommt zur Laufzeit per Bind-Mount; in den Build-Kontext gehoeren
+# nur pyproject.toml und README.md.
+.git/
+.venv/
+.github/
+setup-docs/
+card/
+tests/
+custom_components/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/

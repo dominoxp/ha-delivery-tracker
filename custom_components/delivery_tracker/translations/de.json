@@ -1,0 +1,16 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Delivery Tracker",
+        "description": "Gibt der Integration einen Namen. Postfächer, Zieladressen und API-Quellen werden anschließend hinzugefügt.",
+        "data": {
+          "name": "Name"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Es ist bereits eine Instanz von Delivery Tracker eingerichtet."
+    }
+  }
+}

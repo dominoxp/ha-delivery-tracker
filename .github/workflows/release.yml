@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: ZIP bauen und anhaengen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version aus dem Tag in manifest.json schreiben
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          jq --arg version "$version" '.version = $version' \
+            custom_components/delivery_tracker/manifest.json > manifest.tmp
+          mv manifest.tmp custom_components/delivery_tracker/manifest.json
+          echo "Manifest-Version: $version"
+
+      - name: ZIP bauen
+        # Gezippt wird nur der Inhalt des Integrationsordners — setup-docs, card,
+        # tests und CI-Dateien gehoeren nicht ins Release.
+        run: |
+          cd custom_components/delivery_tracker
+          zip -r delivery_tracker.zip . -x '*.pyc' -x '__pycache__/*'
+
+      - name: ZIP an den Release anhaengen
+        uses: softprops/action-gh-release@v2
+        with:
+          files: custom_components/delivery_tracker/delivery_tracker.zip
