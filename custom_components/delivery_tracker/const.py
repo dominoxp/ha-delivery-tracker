@@ -24,6 +24,25 @@ CONF_NAME: Final = "name"
 DEFAULT_NAME: Final = "Delivery Tracker"
 DEFAULT_RETENTION_DAYS: Final = 14
 
+# Standardwerte der IMAP-Quelle. Die Konfigurationsfelder dazu kommen in Step 2.1.
+DEFAULT_IMAP_PORT_SSL: Final = 993
+DEFAULT_IMAP_PORT_PLAIN: Final = 143
+DEFAULT_IMAP_FOLDER: Final = "INBOX"
+# Suchkriterium fuer neue Mails. `\Seen` ist die dauerhafte Markierung „verarbeitet".
+DEFAULT_IMAP_SEARCH: Final = "UNSEEN"
+DEFAULT_IMAP_POLL_INTERVAL: Final = 300
+DEFAULT_IMAP_LOOKBACK_DAYS: Final = 3
+# Obergrenze der Mails pro Durchlauf, damit ein grosses Postfach den Loop nicht blockiert.
+DEFAULT_IMAP_MAX_MESSAGES: Final = 25
+DEFAULT_IMAP_COMMAND_TIMEOUT: Final = 10.0
+
+# IDLE wird von Servern nach ca. 29 Minuten getrennt; vorher selbst erneuern.
+IMAP_IDLE_REFRESH: Final = 1500.0
+# Reconnect-Backoff: Verbindungsverlust ist Normalbetrieb, kein Fehlerzustand.
+IMAP_BACKOFF_START: Final = 5.0
+IMAP_BACKOFF_MAX: Final = 300.0
+IMAP_BACKOFF_FACTOR: Final = 2.0
+
 # Obergrenze der Event-Historie je Sendung, damit der Store nicht unbegrenzt waechst.
 MAX_EVENTS_PER_SHIPMENT: Final = 50
 
