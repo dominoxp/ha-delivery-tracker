@@ -1,0 +1,23 @@
+Return-Path: <versand@example.com>
+Delivered-To: max.mustermann@example.org
+From: Example Express <versand@example.com>
+To: Max Mustermann <max.mustermann@example.org>
+Subject: =?UTF-8?Q?Ihre_Sendung_ist_unterwegs_=E2=80=93_Kaffeer=C3=B6sterei?=
+Date: Tue, 28 Jul 2026 09:15:00 +0200
+Message-ID: <utf8-plain@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+Hallo Max Mustermann,
+
+Ihre Sendung ist unterwegs und wird in K=C3=BCrze zugestellt.
+
+Sendungsnummer: EX1234567890DE
+Voraussichtlich: Donnerstag, 30.07.2026 zwischen 10 und 14 Uhr
+Im Auftrag von Kaffeer=C3=B6sterei Nord
+Artikel: Kaffeebohnen 1kg
+Lieferadresse: Musterstra=C3=9Fe 1, 12345 Musterstadt
+
+Beste Gr=C3=BC=C3=9Fe
+Example Express GmbH

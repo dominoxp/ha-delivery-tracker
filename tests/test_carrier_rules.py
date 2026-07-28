@@ -13,6 +13,7 @@ from custom_components.delivery_tracker.carriers.rules import (
     parse_rules,
 )
 from custom_components.delivery_tracker.models import ShipmentStatus
+from custom_components.delivery_tracker.tracking import TrackingChecksum
 
 MINIMAL = """
 carrier: acme
@@ -23,13 +24,17 @@ VOLLSTAENDIG = """
 carrier: acme
 name: ACME Logistik
 score_bonus: -5
+priority: 7
 match:
   from_domains: ["@ACME.com", "acme.de"]
   subject_patterns: ["ihre sendung"]
   body_patterns: ["acme logistik gmbh"]
+  newsletter_patterns: ["angebot der woche"]
 tracking:
   patterns: ["\\\\b(AC\\\\d{8})\\\\b"]
   url: "https://acme.example/{tracking_number}"
+  checksum: deutsche_post
+  require_context: true
 status_map:
   - status: delivered
     patterns: ["wurde zugestellt"]
@@ -54,8 +59,13 @@ def test_minimale_regeln_haben_leere_defaults():
     assert rules.carrier_id == "acme"
     assert rules.name == "ACME Logistik"
     assert rules.score_bonus == 0
+    assert rules.priority == 0
     assert rules.from_domains == ()
+    assert rules.newsletter_patterns == ()
     assert rules.status_map == ()
+    # Ohne Angabe wird nur geprueft, was sich zweifelsfrei zuordnen laesst.
+    assert rules.checksum is TrackingChecksum.AUTO
+    assert rules.require_context is False
     assert rules.tracking_url("AC12345678") is None
     # Alle Extraktionsfelder existieren, auch wenn `fields` fehlt.
     assert set(rules.fields) == set(EXTRACT_FIELDS)
@@ -68,6 +78,10 @@ def test_vollstaendige_regeln_werden_normalisiert():
 
     assert rules.from_domains == ("acme.com", "acme.de")
     assert rules.score_bonus == -5
+    assert rules.priority == 7
+    assert rules.checksum is TrackingChecksum.DEUTSCHE_POST
+    assert rules.require_context is True
+    assert rules.newsletter_patterns[0].search("Unser ANGEBOT DER WOCHE")
     assert rules.status_map[0].status is ShipmentStatus.DELIVERED
     assert rules.status_map[1].status is ShipmentStatus.IN_TRANSIT
     assert rules.tracking_url("AC12345678") == "https://acme.example/AC12345678"
@@ -103,6 +117,16 @@ def test_unbekannter_status_wird_abgelehnt():
     message = str(err.value)
     assert "unbekannter Status" in message
     assert "out_for_delivery" in message
+
+
+def test_unbekanntes_pruefverfahren_wird_abgelehnt():
+    """Ein Tippfehler beim Verfahren wuerde sonst still alle Pruefungen abschalten."""
+    with pytest.raises(RulesError) as err:
+        _rules("carrier: acme\nname: ACME\ntracking:\n  checksum: luhn\n")
+
+    message = str(err.value)
+    assert "unbekanntes Pruefverfahren" in message
+    assert "deutsche_post" in message
 
 
 def test_tracking_url_ohne_platzhalter_wird_abgelehnt():

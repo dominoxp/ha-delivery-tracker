@@ -14,7 +14,7 @@ from custom_components.delivery_tracker.merge import (
     has_status_changed,
     merge_events,
     merge_shipments,
-    normalize_tracking_number,
+    tracking_id_token,
 )
 from custom_components.delivery_tracker.models import (
     Shipment,
@@ -66,7 +66,7 @@ def _api_shipment(**overrides: object) -> Shipment:
 
 def test_normalisierte_trackingnummer_ergibt_stabile_id():
     """Schreibweise und Trennzeichen duerfen die ID nicht veraendern."""
-    assert normalize_tracking_number("JJD 0099-8899") == "jjd00998899"
+    assert tracking_id_token("JJD 0099-8899") == "jjd00998899"
     assert build_shipment_id("DHL", "JJD 0099 8899") == "dhl_jjd00998899"
     assert build_shipment_id("dhl", "jjd00998899") == "dhl_jjd00998899"
 

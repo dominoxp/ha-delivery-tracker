@@ -1,6 +1,7 @@
 """Gemeinsame Test-Fixtures."""
 
-from collections.abc import Generator
+from collections.abc import Callable, Generator
+from pathlib import Path
 
 import pytest
 from homeassistant.config_entries import ConfigEntry
@@ -10,6 +11,18 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.delivery_tracker.const import DOMAIN
 
 pytest_plugins = ["pytest_homeassistant_custom_component"]
+
+EMAIL_FIXTURES = Path(__file__).parent / "fixtures" / "emails"
+
+
+@pytest.fixture
+def email_fixture() -> Callable[[str], bytes]:
+    """Liefert eine anonymisierte Fixture-Mail als Rohbytes."""
+
+    def _load(name: str) -> bytes:
+        return (EMAIL_FIXTURES / name).read_bytes()
+
+    return _load
 
 
 @pytest.fixture(autouse=True)

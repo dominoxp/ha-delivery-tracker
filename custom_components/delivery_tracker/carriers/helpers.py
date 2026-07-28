@@ -19,6 +19,7 @@ from ..dates import parse_eta
 from ..mail import MailMessage
 from ..merge import build_shipment_id
 from ..models import Shipment, ShipmentEvent, ShipmentStatus, SourceRecord
+from ..tracking import find_tracking_numbers
 from .rules import CarrierRules, StatusRule
 
 # Gewichte der Trefferbewertung. Der Absender ist das staerkste Signal, ein
@@ -28,6 +29,11 @@ WEIGHT_FROM_DOMAIN: Final = 50
 WEIGHT_SUBJECT: Final = 20
 WEIGHT_TRACKING: Final = 15
 WEIGHT_BODY: Final = 10
+
+# Abzug fuer Massenversand ohne Trackingnummer. Zusteller verschicken unter
+# derselben Absender-Domain auch Werbung; eine echte Versandbenachrichtigung
+# traegt dagegen praktisch immer eine Nummer.
+MALUS_BULK: Final = 25
 
 # Obergrenze fuer aus Mailtext extrahierte Werte — schuetzt vor Regex, die
 # versehentlich den halben Body einfangen.
@@ -81,21 +87,27 @@ def score_mail(rules: CarrierRules, mail: MailMessage) -> int:
     0 bedeutet „gehoert nicht zu mir". Bei mehreren Kandidaten gewinnt der
     hoechste Wert, deshalb ist die Bewertung additiv: Je mehr Signale
     zusammenkommen, desto sicherer der Treffer.
+
+    Newsletter und Werbung desselben Absenders sind die haeufigste Fehlerquelle.
+    Die Absender-Domain allein reicht deshalb nie — es muss immer ein
+    inhaltliches Signal dazukommen.
     """
-    score = 0
+    text = mail.searchable_text
+    if any(pattern.search(text) for pattern in rules.newsletter_patterns):
+        return 0
+
+    subject_hit = any(pattern.search(mail.subject) for pattern in rules.subject_patterns)
+    tracking_hit = any(pattern.search(text) for pattern in rules.tracking_patterns)
+    body_hit = any(pattern.search(text) for pattern in rules.body_patterns)
+    if not (subject_hit or tracking_hit or body_hit):
+        return 0
+
+    score = WEIGHT_SUBJECT * subject_hit + WEIGHT_TRACKING * tracking_hit + WEIGHT_BODY * body_hit
     if rules.from_domains and domain_matches(mail.from_domain, rules.from_domains):
         score += WEIGHT_FROM_DOMAIN
+    if mail.is_bulk and not tracking_hit:
+        score -= MALUS_BULK
 
-    text = mail.searchable_text
-    if any(pattern.search(mail.subject) for pattern in rules.subject_patterns):
-        score += WEIGHT_SUBJECT
-    if any(pattern.search(text) for pattern in rules.tracking_patterns):
-        score += WEIGHT_TRACKING
-    if any(pattern.search(text) for pattern in rules.body_patterns):
-        score += WEIGHT_BODY
-
-    if score == 0:
-        return 0
     # Der Bonus verschiebt Plugins gegeneinander (negativ z.B. beim generischen
     # Fallback), darf einen Treffer aber nie in ein Nicht-Treffen kippen.
     return max(1, score + rules.score_bonus)
@@ -120,37 +132,42 @@ def extract_fields(rules: CarrierRules, text: str) -> dict[str, str | None]:
     return {name: first_match(patterns, text) for name, patterns in rules.fields.items()}
 
 
-def build_shipment_from_rules(
+def extract_tracking_numbers(rules: CarrierRules, mail: MailMessage) -> list[str]:
+    """Alle Trackingnummern einer Mail — normalisiert, gefiltert, ohne Dubletten."""
+    return find_tracking_numbers(
+        mail.searchable_text,
+        rules.tracking_patterns,
+        scheme=rules.checksum,
+        require_context=rules.require_context,
+    )
+
+
+def build_shipments_from_rules(
     rules: CarrierRules,
     mail: MailMessage,
     *,
     source_id: str = SOURCE_IMAP,
     now: datetime | None = None,
-) -> Shipment | None:
-    """Aus Regeln und Mail eine Sendung bauen.
+) -> list[Shipment]:
+    """Aus Regeln und Mail alle enthaltenen Sendungen bauen.
 
-    `None` heisst: Die Mail enthaelt weder Tracking- noch Bestellnummer und ist
-    damit keiner Sendung zuzuordnen.
+    Eine Sammelbestaetigung nennt mehrere Trackingnummern; jede davon ist eine
+    eigene Sendung. Status, Liefertermin und Kontextfelder gelten dabei fuer alle
+    gleichermassen — feiner aufloesen kann nur ein Plugin, das das Layout seiner
+    Mails kennt (Step 1.3).
+
+    Eine leere Liste heisst: Die Mail enthaelt weder Tracking- noch Bestellnummer
+    und ist damit keiner Sendung zuzuordnen.
     """
     fetched_at = now or dt_util.utcnow()
     observed_at = mail.date or fetched_at
     text = mail.searchable_text
 
-    tracking_number = first_match(rules.tracking_patterns, text)
+    tracking_numbers = extract_tracking_numbers(rules, mail)
     values = extract_fields(rules, text)
     order_number = values.get("order_number")
-    if not tracking_number and not order_number:
-        return None
-
-    try:
-        shipment_id = build_shipment_id(
-            rules.carrier_id,
-            tracking_number,
-            sender=values.get("sender"),
-            order_number=order_number,
-        )
-    except ValueError:
-        return None
+    if not tracking_numbers and not order_number:
+        return []
 
     status, status_text = map_status(text, rules.status_map)
 
@@ -163,34 +180,63 @@ def build_shipment_from_rules(
         delivered_start, _ = parse_eta(delivered_text, now=observed_at)
         delivered_at = delivered_start or delivered_at
 
-    events: list[ShipmentEvent] = []
-    if status is not ShipmentStatus.UNKNOWN:
-        events.append(ShipmentEvent(timestamp=observed_at, status=status, text=status_text))
-
-    return Shipment(
-        id=shipment_id,
-        carrier=rules.carrier_id,
-        tracking_number=tracking_number,
-        status=status,
-        status_text=status_text,
-        eta_start=eta_start,
-        eta_end=eta_end,
-        delivered_at=delivered_at,
-        destination_raw=values.get("destination_raw"),
-        sender=values.get("sender"),
-        description=values.get("description"),
-        order_number=order_number,
-        pickup_location=values.get("pickup_location"),
-        pickup_code=values.get("pickup_code"),
-        tracking_url=rules.tracking_url(tracking_number),
-        events=events,
-        sources=[
-            SourceRecord(
-                source_id=source_id,
-                fetched_at=fetched_at,
-                reference=mail.message_id or None,
+    shipments: list[Shipment] = []
+    # Ohne Trackingnummer bleibt die Bestellnummer als Anker — die spaetere
+    # Versandmail rastet ueber dieselbe ID darauf ein.
+    for tracking_number in tracking_numbers or [None]:
+        try:
+            shipment_id = build_shipment_id(
+                rules.carrier_id,
+                tracking_number,
+                sender=values.get("sender"),
+                order_number=order_number,
             )
-        ],
-        first_seen=observed_at,
-        last_updated=observed_at,
-    )
+        except ValueError:
+            continue
+
+        events: list[ShipmentEvent] = []
+        if status is not ShipmentStatus.UNKNOWN:
+            events.append(ShipmentEvent(timestamp=observed_at, status=status, text=status_text))
+
+        shipments.append(
+            Shipment(
+                id=shipment_id,
+                carrier=rules.carrier_id,
+                tracking_number=tracking_number,
+                status=status,
+                status_text=status_text,
+                eta_start=eta_start,
+                eta_end=eta_end,
+                delivered_at=delivered_at,
+                destination_raw=values.get("destination_raw"),
+                sender=values.get("sender"),
+                description=values.get("description"),
+                order_number=order_number,
+                pickup_location=values.get("pickup_location"),
+                pickup_code=values.get("pickup_code"),
+                tracking_url=rules.tracking_url(tracking_number),
+                events=events,
+                sources=[
+                    SourceRecord(
+                        source_id=source_id,
+                        fetched_at=fetched_at,
+                        reference=mail.message_id or None,
+                    )
+                ],
+                first_seen=observed_at,
+                last_updated=observed_at,
+            )
+        )
+    return shipments
+
+
+def build_shipment_from_rules(
+    rules: CarrierRules,
+    mail: MailMessage,
+    *,
+    source_id: str = SOURCE_IMAP,
+    now: datetime | None = None,
+) -> Shipment | None:
+    """Die erste Sendung einer Mail — fuer Aufrufer, die nur eine erwarten."""
+    shipments = build_shipments_from_rules(rules, mail, source_id=source_id, now=now)
+    return shipments[0] if shipments else None

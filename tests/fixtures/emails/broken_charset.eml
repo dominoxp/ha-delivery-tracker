@@ -1,0 +1,19 @@
+Return-Path: <versand@example.com>
+From: Example Express <versand@example.com>
+To: max.mustermann@example.org
+Subject: =?UNKNOWN-8BIT?Q?Ihre_Sendung_wurde_=FCbergeben?=
+Date: Tue, 28 Jul 2026 11:30:00 +0200
+Message-ID: <broken-charset@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="x-unknown"
+Content-Transfer-Encoding: quoted-printable
+
+Guten Tag,
+
+Ihre Sendung wurde an Example Express =FCbergeben und ist unterwegs.
+
+Sendungsnummer: EX3344556677DE
+Gr=F6=DFte zul=E4ssige Zustellzeit: 18:00 Uhr
+Lieferadresse: Musterweg 9, 12345 Musterstadt
+
+Example Express GmbH

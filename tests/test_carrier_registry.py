@@ -136,6 +136,60 @@ def test_bestes_plugin_gewinnt(tmp_path: Path):
     assert score > generic.matches(_mail())
 
 
+def test_prioritaet_entscheidet_bei_gleichstand(tmp_path: Path):
+    """Zwei Plugins mit derselben Bewertung — die Prioritaet loest den Gleichstand."""
+    _write_plugin(
+        tmp_path,
+        "a_carrier",
+        'carrier: a_carrier\nname: A\nmatch:\n  body_patterns: ["sendungsnummer"]\n',
+    )
+    _write_plugin(
+        tmp_path,
+        "b_carrier",
+        'carrier: b_carrier\nname: B\npriority: 10\nmatch:\n  body_patterns: ["sendungsnummer"]\n',
+    )
+
+    matched = CarrierRegistry(discover_plugins(tmp_path)).match(_mail())
+
+    assert matched is not None
+    assert matched[0].carrier_id == "b_carrier"
+
+
+def test_gleichstand_ohne_prioritaet_bleibt_reproduzierbar(tmp_path: Path):
+    """Ohne Prioritaet gewinnt die alphabetisch erste ID — Hauptsache stabil."""
+    for name in ("a_carrier", "b_carrier"):
+        _write_plugin(
+            tmp_path,
+            name,
+            f'carrier: {name}\nname: {name}\nmatch:\n  body_patterns: ["sendungsnummer"]\n',
+        )
+
+    matched = CarrierRegistry(discover_plugins(tmp_path)).match(_mail())
+
+    assert matched is not None
+    assert matched[0].carrier_id == "a_carrier"
+
+
+def test_parse_all_liefert_alle_sendungen_der_mail(tmp_path: Path):
+    """Eine Mail kann mehrere Sendungen tragen; die Registry gibt sie alle zurueck."""
+    _write_plugin(
+        tmp_path,
+        "acme",
+        'carrier: acme\nname: ACME\nmatch:\n  from_domains: ["acme.com"]\n'
+        '  body_patterns: ["sendungsnummer"]\n'
+        'tracking:\n  patterns: ["\\\\b(AC\\\\d{8})\\\\b"]\n',
+    )
+    registry = CarrierRegistry(discover_plugins(tmp_path))
+    mail = _mail(text="Sendungsnummer AC12345678 und AC87654321")
+
+    shipments = registry.parse_all(mail)
+
+    assert [shipment.tracking_number for shipment in shipments] == [
+        "AC12345678",
+        "AC87654321",
+    ]
+
+
 def test_keine_zuordnung_ohne_treffer(tmp_path: Path):
     """Passt kein Plugin, gibt es weder Treffer noch Sendung."""
     _write_plugin(

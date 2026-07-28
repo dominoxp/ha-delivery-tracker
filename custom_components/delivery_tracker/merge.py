@@ -21,17 +21,19 @@ from .models import (
     ShipmentStatus,
     SourceRecord,
 )
+from .tracking import normalize_tracking_number
 
 _NON_ALNUM: Final = re.compile(r"[^a-z0-9]+")
 
 
-def normalize_tracking_number(value: str) -> str:
-    """Trackingnummer auf Kleinbuchstaben und Ziffern reduzieren.
+def tracking_id_token(value: str) -> str:
+    """Die Trackingnummer auf den Teil reduzieren, der in die Sendungs-ID geht.
 
-    Bewusst generisch: carrier-spezifische Normalisierung und Pruefziffern
-    kommen in Step 1.2 dazu.
+    `normalize_tracking_number` raeumt bereits Trennzeichen weg; hier fallen
+    zusaetzlich Sonderzeichen und Grossschreibung weg, damit die ID ein
+    unauffaelliger Bezeichner bleibt.
     """
-    return _NON_ALNUM.sub("", value.lower())
+    return _NON_ALNUM.sub("", normalize_tracking_number(value).lower())
 
 
 def _slug(value: str | None) -> str:
@@ -56,9 +58,9 @@ def build_shipment_id(
     carrier_slug = _slug(carrier) or "unknown"
 
     if tracking_number:
-        normalized = normalize_tracking_number(tracking_number)
-        if normalized:
-            return f"{carrier_slug}_{normalized}"
+        token = tracking_id_token(tracking_number)
+        if token:
+            return f"{carrier_slug}_{token}"
 
     if order_number:
         parts = [carrier_slug, "order", _slug(sender), _slug(order_number)]

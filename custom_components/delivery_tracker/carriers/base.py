@@ -16,17 +16,19 @@ from typing import Self
 
 from ..mail import MailMessage
 from ..models import Shipment
-from .helpers import build_shipment_from_rules, score_mail
+from .helpers import build_shipments_from_rules, score_mail
 from .rules import RULES_FILENAME, CarrierRules, load_rules
 
 
 class CarrierPlugin(ABC):
     """Basisklasse aller Zusteller-Plugins."""
 
-    def __init__(self, carrier_id: str, name: str) -> None:
-        """Plugin mit seiner ID und dem Anzeigenamen anlegen."""
+    def __init__(self, carrier_id: str, name: str, *, priority: int = 0) -> None:
+        """Plugin mit seiner ID, dem Anzeigenamen und seiner Rangfolge anlegen."""
         self.carrier_id = carrier_id
         self.name = name
+        self.priority = priority
+        """Entscheidet bei gleicher Bewertung, welches Plugin die Mail bekommt."""
 
     @abstractmethod
     def matches(self, mail: MailMessage) -> int:
@@ -43,6 +45,15 @@ class CarrierPlugin(ABC):
         `None` heisst: Die Mail gehoert zwar zu diesem Zusteller, enthaelt aber
         keine verwertbare Sendung (z.B. reine Werbung).
         """
+
+    def parse_all(self, mail: MailMessage) -> list[Shipment]:
+        """Alle Sendungen der Mail — eine Sammelbestaetigung enthaelt mehrere.
+
+        Die Standardfassung reicht `parse` durch; Plugins, die mehrere Sendungen
+        je Mail liefern koennen, ueberschreiben diese Methode.
+        """
+        shipment = self.parse(mail)
+        return [shipment] if shipment is not None else []
 
     def tracking_url(self, tracking_number: str) -> str | None:
         """Die Sendungsverfolgungs-URL zu einer Nummer bilden."""
@@ -62,7 +73,7 @@ class RulesCarrier(CarrierPlugin):
 
     def __init__(self, rules: CarrierRules) -> None:
         """Plugin aus bereits geladenen Regeln bauen."""
-        super().__init__(rules.carrier_id, rules.name)
+        super().__init__(rules.carrier_id, rules.name, priority=rules.priority)
         self.rules = rules
 
     @classmethod
@@ -75,8 +86,13 @@ class RulesCarrier(CarrierPlugin):
         return score_mail(self.rules, mail)
 
     def parse(self, mail: MailMessage) -> Shipment | None:
-        """Sendung aus den Extraktionsregeln."""
-        return build_shipment_from_rules(self.rules, mail)
+        """Die erste Sendung aus den Extraktionsregeln."""
+        shipments = self.parse_all(mail)
+        return shipments[0] if shipments else None
+
+    def parse_all(self, mail: MailMessage) -> list[Shipment]:
+        """Alle Sendungen aus den Extraktionsregeln."""
+        return build_shipments_from_rules(self.rules, mail)
 
     def tracking_url(self, tracking_number: str) -> str | None:
         """URL aus der Vorlage in den Regeln."""

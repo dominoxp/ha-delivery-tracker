@@ -10,11 +10,13 @@ from homeassistant.util import dt as dt_util
 
 from custom_components.delivery_tracker.carriers.base import RulesCarrier
 from custom_components.delivery_tracker.carriers.helpers import (
+    MALUS_BULK,
     WEIGHT_BODY,
     WEIGHT_FROM_DOMAIN,
     WEIGHT_SUBJECT,
     WEIGHT_TRACKING,
     build_shipment_from_rules,
+    build_shipments_from_rules,
     domain_matches,
     first_match,
     map_status,
@@ -126,6 +128,43 @@ def test_score_null_ohne_signal(rules: CarrierRules):
     assert score_mail(rules, fremd) == 0
 
 
+def test_absender_allein_reicht_nicht(rules: CarrierRules):
+    """Newsletter kommen von derselben Adresse wie Versandbenachrichtigungen.
+
+    Ohne inhaltliches Signal darf die Domain allein deshalb nie einen Treffer
+    ergeben — sonst landet jede Werbemail des Zustellers in der Pipeline.
+    """
+    werbung = _mail(subject="Unsere Angebote", text="Diese Woche 20% Rabatt auf alles.")
+
+    assert score_mail(rules, werbung) == 0
+
+
+def test_newsletter_muster_setzt_hart_auf_null():
+    """Ein Werbe-Muster schlaegt jedes andere Signal."""
+    regeln = parse_rules(
+        yaml.safe_load(
+            "carrier: acme\nname: ACME\n"
+            'match:\n  from_domains: ["acme.com"]\n'
+            '  subject_patterns: ["ihre sendung"]\n'
+            '  newsletter_patterns: ["angebot der woche"]\n'
+        )
+    )
+
+    assert score_mail(regeln, _mail(text="Angebot der Woche: Kaffee")) == 0
+
+
+def test_massenversand_ohne_nummer_wird_abgewertet(rules: CarrierRules):
+    """`List-Unsubscribe` und keine Trackingnummer — das riecht nach Newsletter."""
+    ohne_nummer = _mail(text="Wir informieren Sie, sobald es losgeht.")
+    massenversand = _mail(
+        text="Wir informieren Sie, sobald es losgeht.",
+        list_unsubscribe="<https://acme.com/abmelden>",
+    )
+
+    assert score_mail(rules, ohne_nummer) == WEIGHT_FROM_DOMAIN + WEIGHT_SUBJECT
+    assert score_mail(rules, massenversand) == WEIGHT_FROM_DOMAIN + WEIGHT_SUBJECT - MALUS_BULK
+
+
 def test_score_bonus_verschiebt_aber_kippt_nicht():
     """Der Bonus rangiert Plugins, macht aus einem Treffer aber nie ein Nichts."""
     schwach = parse_rules(
@@ -215,6 +254,32 @@ def test_build_shipment_nur_mit_bestellnummer(rules: CarrierRules):
     assert shipment.order_number == "ABC-12345"
     assert shipment.id.startswith("acme_order_")
     assert shipment.tracking_url is None
+
+
+def test_build_shipments_liefert_jede_nummer(rules: CarrierRules):
+    """Eine Sammelbestaetigung ergibt eine Sendung je Trackingnummer."""
+    mail = _mail(
+        text=(
+            "Sendungsnummer: AC11111111\n"
+            "Sendungsnummer: AC22222222\n"
+            "Im Auftrag von Kaffeeroesterei Nord\n"
+        )
+    )
+
+    shipments = build_shipments_from_rules(rules, mail)
+
+    assert [shipment.tracking_number for shipment in shipments] == [
+        "AC11111111",
+        "AC22222222",
+    ]
+    assert len({shipment.id for shipment in shipments}) == 2
+    # Der gemeinsame Kontext gilt fuer beide Sendungen.
+    assert all(shipment.sender == "Kaffeeroesterei Nord" for shipment in shipments)
+
+
+def test_build_shipments_ohne_nummer_ist_leer(rules: CarrierRules):
+    """Ohne Tracking- und Bestellnummer gibt es nichts zuzuordnen."""
+    assert build_shipments_from_rules(rules, _mail(text="Bald geht es los.")) == []
 
 
 def test_rules_carrier_bindet_alles_zusammen(rules: CarrierRules):

@@ -89,10 +89,11 @@ class CarrierRegistry:
     def match(self, mail: MailMessage) -> tuple[CarrierPlugin, int] | None:
         """Das am besten passende Plugin samt Bewertung ermitteln.
 
-        Bei Gleichstand gewinnt die alphabetisch erste Carrier-ID, damit die
-        Zuordnung reproduzierbar bleibt.
+        Bei gleicher Bewertung entscheidet die Plugin-Prioritaet, danach die
+        alphabetisch erste Carrier-ID — die Zuordnung ist damit reproduzierbar.
         """
         best: tuple[CarrierPlugin, int] | None = None
+        best_key: tuple[int, int] | None = None
         for plugin in self.plugins:
             try:
                 score = plugin.matches(mail)
@@ -103,32 +104,42 @@ class CarrierRegistry:
                 continue
             if score <= 0:
                 continue
-            if best is None or score > best[1]:
-                best = (plugin, score)
+            key = (score, plugin.priority)
+            if best_key is None or key > best_key:
+                best, best_key = (plugin, score), key
         return best
 
-    def parse(self, mail: MailMessage) -> Shipment | None:
-        """Die Mail vom bestbewerteten Plugin auswerten lassen."""
+    def parse_all(self, mail: MailMessage) -> list[Shipment]:
+        """Die Mail vom bestbewerteten Plugin auswerten lassen.
+
+        Eine leere Liste heisst: keine Zuordnung oder keine verwertbare Sendung.
+        Der Aufrufer (die Pipeline) unterscheidet beides ueber `match`.
+        """
         matched = self.match(mail)
         if matched is None:
             _LOGGER.debug("Keine Zuordnung fuer Mail %s", mail.message_id)
-            return None
+            return []
 
         plugin, score = matched
         try:
-            shipment = plugin.parse(mail)
+            shipments = plugin.parse_all(mail)
         except Exception:
             _LOGGER.exception("Carrier-Plugin '%s' ist bei parse() gescheitert", plugin.carrier_id)
-            return None
+            return []
 
         _LOGGER.debug(
-            "Mail %s -> Plugin '%s' (Bewertung %d), Sendung: %s",
+            "Mail %s -> Plugin '%s' (Bewertung %d), Sendungen: %s",
             mail.message_id,
             plugin.carrier_id,
             score,
-            shipment.id if shipment else "keine",
+            ", ".join(shipment.id for shipment in shipments) or "keine",
         )
-        return shipment
+        return shipments
+
+    def parse(self, mail: MailMessage) -> Shipment | None:
+        """Die erste Sendung der Mail — fuer Aufrufer, die nur eine erwarten."""
+        shipments = self.parse_all(mail)
+        return shipments[0] if shipments else None
 
 
 def _import_plugin_module(directory: Path, package: str | None) -> ModuleType:

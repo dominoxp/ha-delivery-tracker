@@ -21,8 +21,19 @@ name: Example Express
 # Nicht-Treffer — die Bewertung bleibt mindestens 1.
 score_bonus: 0
 
+# Optional: Entscheidet bei *gleicher* Bewertung, wer die Mail bekommt
+# (-100 bis 100). Anders als `score_bonus` verschiebt es nichts gegenueber
+# schwaecheren oder staerkeren Treffern, sondern loest nur den Gleichstand auf.
+priority: 0
+
 # Optional: Woran die Mail erkannt wird. Jede Kategorie steuert Punkte bei:
 # Absender-Domain 50, Betreff 20, Trackingnummer 15, Body 10.
+#
+# Wichtig: Die Absender-Domain allein reicht nie. Newsletter kommen von derselben
+# Adresse wie Versandbenachrichtigungen — ohne ein inhaltliches Signal aus
+# Betreff, Body oder Trackingnummer bleibt die Bewertung 0. Traegt die Mail
+# `List-Unsubscribe` (Massenversand) und findet sich keine Trackingnummer, gibt
+# es zusaetzlich 25 Punkte Abzug.
 match:
   # Absender-Domains; Sub-Domains zaehlen automatisch mit (mail.example.com).
   from_domains:
@@ -34,14 +45,36 @@ match:
   # Muster auf Betreff + Body — fuer Formulierungen, die nur dieser Zusteller nutzt.
   body_patterns:
     - "example express gmbh"
+  # Muster, die die Mail als Werbung ausweisen. Ein Treffer hier setzt die
+  # Bewertung hart auf 0 — das schlaegt jedes andere Signal.
+  newsletter_patterns:
+    - "angebot der woche"
+    - "jetzt shoppen"
 
 tracking:
-  # Muster fuer die Trackingnummer. Die erste Gruppe (oder `value`) ist die Nummer.
+  # Muster fuer die Trackingnummer. Die erste Gruppe (oder `value`) ist die
+  # Nummer. Gesucht wird in Betreff, Body und zusaetzlich in den Parametern und
+  # Pfaden aller enthaltenen Links — bei vielen Zustellern steht die Nummer nur
+  # im Ziel des „Sendung verfolgen"-Buttons.
   patterns:
     - "sendungsnummer:?\\s*(?P<value>EX\\d{10}DE)"
     - "\\b(EX\\d{10}DE)\\b"
   # Vorlage der Sendungsverfolgungs-URL. Muss {tracking_number} enthalten.
   url: "https://track.example.com/de/{tracking_number}"
+  # Pruefziffernverfahren des Zustellers:
+  #   auto           nur eindeutige Formate pruefen (UPS `1Z…`, 20-stellige NVE)
+  #   none           keine Pruefung
+  #   ups            UPS-Verfahren
+  #   deutsche_post  Leitcode (14 Stellen) / Identcode (12 Stellen), Gewichte 4/9
+  #   gs1            NVE/SSCC, Gewichte 3/1
+  # Zwoelf- und vierzehnstellige Ziffernfolgen nutzen mehrere Zusteller mit
+  # verschiedenen Verfahren — dort muss das Plugin sein Verfahren benennen,
+  # sonst wuerde `auto` gueltige Nummern verwerfen.
+  checksum: auto
+  # Verlangt zusaetzlich ein ankuendigendes Wort an der Fundstelle
+  # („Sendungsnummer:", „Paket verfolgen") oder eine stimmende Pruefziffer.
+  # Fuer weite Muster Pflicht, sonst wird jede Bestellnummer zur Sendung.
+  require_context: false
 
 # Optional: Mailtext -> normalisierter Status. Ausgewertet wird von oben nach
 # unten, die erste passende Regel gewinnt — Spezielles gehoert also nach oben.

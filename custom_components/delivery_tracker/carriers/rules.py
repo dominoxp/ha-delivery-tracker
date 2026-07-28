@@ -23,6 +23,7 @@ from homeassistant.exceptions import HomeAssistantError
 from voluptuous.humanize import humanize_error
 
 from ..models import ShipmentStatus
+from ..tracking import TrackingChecksum
 
 RULES_FILENAME: Final = "rules.yaml"
 
@@ -104,6 +105,15 @@ def _carrier_id(value: Any) -> str:
     return text
 
 
+def _checksum(value: Any) -> TrackingChecksum:
+    """Das Pruefziffernverfahren des Zustellers auswaehlen."""
+    try:
+        return TrackingChecksum(str(value))
+    except ValueError as err:
+        allowed = ", ".join(scheme.value for scheme in TrackingChecksum)
+        raise vol.Invalid(f"unbekanntes Pruefverfahren {value!r} (erlaubt: {allowed})") from err
+
+
 def _url_template(value: Any) -> str | None:
     """Die Tracking-URL-Vorlage pruefen; `None` bedeutet „keine Vorlage"."""
     if value is None:
@@ -125,6 +135,7 @@ _MATCH_SCHEMA: Final = vol.Schema(
         vol.Optional("from_domains", default=list): _domain_list,
         vol.Optional("subject_patterns", default=list): _regex_list,
         vol.Optional("body_patterns", default=list): _regex_list,
+        vol.Optional("newsletter_patterns", default=list): _regex_list,
     }
 )
 
@@ -132,6 +143,8 @@ _TRACKING_SCHEMA: Final = vol.Schema(
     {
         vol.Optional("patterns", default=list): _regex_list,
         vol.Optional("url", default=None): _url_template,
+        vol.Optional("checksum", default=TrackingChecksum.AUTO): _checksum,
+        vol.Optional("require_context", default=False): bool,
     }
 )
 
@@ -160,6 +173,7 @@ RULES_SCHEMA: Final = vol.Schema(
         vol.Required("carrier"): _carrier_id,
         vol.Required("name"): vol.All(str, vol.Length(min=1)),
         vol.Optional("score_bonus", default=0): vol.All(int, vol.Range(min=-100, max=100)),
+        vol.Optional("priority", default=0): vol.All(int, vol.Range(min=-100, max=100)),
         vol.Optional("match", default=lambda: _MATCH_SCHEMA({})): _MATCH_SCHEMA,
         vol.Optional("tracking", default=lambda: _TRACKING_SCHEMA({})): _TRACKING_SCHEMA,
         vol.Optional("status_map", default=list): [_STATUS_RULE_SCHEMA],
@@ -184,11 +198,18 @@ class CarrierRules:
     carrier_id: str
     name: str
     score_bonus: int = 0
+    priority: int = 0
+    """Entscheidet bei gleicher Bewertung, welches Plugin die Mail bekommt."""
     from_domains: tuple[str, ...] = ()
     subject_patterns: tuple[re.Pattern[str], ...] = ()
     body_patterns: tuple[re.Pattern[str], ...] = ()
+    newsletter_patterns: tuple[re.Pattern[str], ...] = ()
+    """Trifft eines dieser Muster, ist die Mail Werbung — das Plugin haelt sich raus."""
     tracking_patterns: tuple[re.Pattern[str], ...] = ()
     tracking_url_template: str | None = None
+    checksum: TrackingChecksum = TrackingChecksum.AUTO
+    require_context: bool = False
+    """Verlangt ein ankuendigendes Wort an der Fundstelle — fuer weite Muster."""
     status_map: tuple[StatusRule, ...] = ()
     eta_patterns: tuple[re.Pattern[str], ...] = ()
     delivered_patterns: tuple[re.Pattern[str], ...] = ()
@@ -216,11 +237,15 @@ def _to_rules(data: Mapping[str, Any]) -> CarrierRules:
         carrier_id=data["carrier"],
         name=data["name"],
         score_bonus=data["score_bonus"],
+        priority=data["priority"],
         from_domains=tuple(match["from_domains"]),
         subject_patterns=tuple(match["subject_patterns"]),
         body_patterns=tuple(match["body_patterns"]),
+        newsletter_patterns=tuple(match["newsletter_patterns"]),
         tracking_patterns=tuple(tracking["patterns"]),
         tracking_url_template=tracking["url"],
+        checksum=tracking["checksum"],
+        require_context=tracking["require_context"],
         status_map=tuple(
             StatusRule(status=rule["status"], patterns=tuple(rule["patterns"]))
             for rule in data["status_map"]
