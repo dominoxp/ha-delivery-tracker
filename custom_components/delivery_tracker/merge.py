@@ -52,8 +52,13 @@ def build_shipment_id(
 ) -> str:
     """Die stabile ID einer Sendung bilden.
 
-    Ohne Trackingnummer (reine Bestellbestaetigung) wird aus Haendler und
-    Bestellnummer abgeleitet, damit eine spaetere Versandmail darauf einrastet.
+    Ohne Trackingnummer (reine Bestellbestaetigung) wird sie aus Haendler und
+    Bestellnummer abgeleitet, damit die Bestellung ueberhaupt einen Anker hat.
+
+    Achtung: Die spaetere Versandmail bekommt dann eine *andere*, nummernbasierte
+    ID und rastet **nicht** von selbst auf die Bestellung ein — `merge_shipments`
+    setzt gleiche IDs voraus. Das Zusammenfuehren zweier getrennt gefuehrter
+    Sendungen anhand der Bestellnummer ist in Step 3.2 vorgesehen.
     """
     carrier_slug = _slug(carrier) or "unknown"
 

@@ -56,6 +56,10 @@ tracking:
   # Nummer. Gesucht wird in Betreff, Body und zusaetzlich in den Parametern und
   # Pfaden aller enthaltenen Links — bei vielen Zustellern steht die Nummer nur
   # im Ziel des „Sendung verfolgen"-Buttons.
+  #
+  # Deshalb braucht es fast immer *zwei* Muster: eines mit Kontextwort fuer den
+  # Fliesstext und eines auf die nackte Nummer. In einem Link steht kein
+  # „Sendungsnummer:" davor — ein Muster, das darauf besteht, findet dort nichts.
   patterns:
     - "sendungsnummer:?\\s*(?P<value>EX\\d{10}DE)"
     - "\\b(EX\\d{10}DE)\\b"
