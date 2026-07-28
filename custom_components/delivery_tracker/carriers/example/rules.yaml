@@ -1,0 +1,118 @@
+# Beispielregeln fuer ein Carrier-Plugin.
+#
+# Jedes Feld ist unten kommentiert; alles ausser `carrier` und `name` ist optional.
+# Regex werden beim Laden kompiliert und immer ohne Beachtung der Gross-/Klein-
+# schreibung angewendet. Unbekannte Felder und ungueltige Regex lassen das Laden
+# scheitern — dann wird nur dieses Plugin uebersprungen, nicht die Integration.
+#
+# Konvention fuer die Wertentnahme: Hat ein Muster die benannte Gruppe `value`,
+# wird deren Inhalt genommen; sonst die erste Gruppe; sonst der ganze Treffer.
+
+# Pflicht: ID des Zustellers. Steckt in jeder Sendungs-ID ({carrier}_{nummer})
+# und muss daher stabil bleiben. Nur a-z, 0-9 und Unterstrich.
+carrier: example
+
+# Pflicht: Anzeigename in der Oberflaeche.
+name: Example Express
+
+# Optional: Verschiebt die Trefferbewertung gegenueber anderen Plugins
+# (-100 bis 100). Negativ fuer generische Fallbacks, positiv fuer Zusteller, die
+# bei Ueberschneidungen gewinnen sollen. Aus einem Treffer wird nie ein
+# Nicht-Treffer — die Bewertung bleibt mindestens 1.
+score_bonus: 0
+
+# Optional: Woran die Mail erkannt wird. Jede Kategorie steuert Punkte bei:
+# Absender-Domain 50, Betreff 20, Trackingnummer 15, Body 10.
+match:
+  # Absender-Domains; Sub-Domains zaehlen automatisch mit (mail.example.com).
+  from_domains:
+    - example.com
+  # Muster auf dem Betreff.
+  subject_patterns:
+    - "example express"
+    - "ihre sendung"
+  # Muster auf Betreff + Body — fuer Formulierungen, die nur dieser Zusteller nutzt.
+  body_patterns:
+    - "example express gmbh"
+
+tracking:
+  # Muster fuer die Trackingnummer. Die erste Gruppe (oder `value`) ist die Nummer.
+  patterns:
+    - "sendungsnummer:?\\s*(?P<value>EX\\d{10}DE)"
+    - "\\b(EX\\d{10}DE)\\b"
+  # Vorlage der Sendungsverfolgungs-URL. Muss {tracking_number} enthalten.
+  url: "https://track.example.com/de/{tracking_number}"
+
+# Optional: Mailtext -> normalisierter Status. Ausgewertet wird von oben nach
+# unten, die erste passende Regel gewinnt — Spezielles gehoert also nach oben.
+# Erlaubte Status: unknown, ordered, label_created, in_transit, delayed, customs,
+# out_for_delivery, ready_for_pickup, delivered, delivery_failed, returned.
+status_map:
+  - status: delivered
+    patterns:
+      - "wurde (?:heute )?zugestellt"
+      - "erfolgreich (?:aus)?geliefert"
+  - status: delivery_failed
+    patterns:
+      - "zustellung(?:sversuch)? .{0,20}(?:nicht|leider) .{0,20}(?:erfolgreich|moeglich|möglich)"
+  - status: returned
+    patterns:
+      - "geht an den absender zur[uü]ck"
+  - status: ready_for_pickup
+    patterns:
+      - "liegt (?:zur abholung )?(?:f[uü]r sie )?bereit"
+      - "abholbereit"
+  - status: out_for_delivery
+    patterns:
+      - "ist in zustellung"
+      - "wird heute zugestellt"
+  - status: delayed
+    patterns:
+      - "verz[oö]gert sich"
+  - status: customs
+    patterns:
+      - "im zoll"
+  - status: in_transit
+    patterns:
+      - "ist unterwegs"
+      - "auf dem weg zu ihnen"
+  - status: label_created
+    patterns:
+      - "sendung wurde (?:elektronisch )?angek[uü]ndigt"
+  - status: ordered
+    patterns:
+      - "bestellung .{0,20}(?:eingegangen|best[aä]tigt)"
+
+# Optional: Datumsangaben. Der Treffer wird als deutscher Text interpretiert —
+# „28.07.2026", „Montag, 28.07.", „morgen zwischen 10 und 14 Uhr" verstehen die
+# Helfer alle. Deshalb sollte das Muster den ganzen Satzteil einfangen.
+dates:
+  # Erwarteter Liefertermin -> eta_start / eta_end.
+  eta_patterns:
+    - "voraussichtlich(?:e zustellung)?:?\\s*(?P<value>[^\\n\\.]{3,60})"
+    - "zustellung am\\s*(?P<value>[^\\n\\.]{3,60})"
+  # Tatsaechliche Zustellung -> delivered_at. Ohne Treffer wird bei Status
+  # `delivered` das Datum der Mail verwendet.
+  delivered_patterns:
+    - "zugestellt am\\s*(?P<value>[^\\n\\.]{3,60})"
+
+# Optional: Weitere Felder, die sich direkt aus dem Text ziehen lassen.
+fields:
+  # Haendler/Versender.
+  sender:
+    - "im auftrag von\\s*(?P<value>[^\\n]{2,60})"
+  # Inhaltsbeschreibung.
+  description:
+    - "artikel:?\\s*(?P<value>[^\\n]{2,80})"
+  # Bestellnummer — traegt eine Bestellbestaetigung ohne Trackingnummer.
+  order_number:
+    - "bestellnummer:?\\s*(?P<value>[A-Z0-9-]{5,30})"
+  # Abholort bei Filial-/Paketshop-Zustellung.
+  pickup_location:
+    - "abholen (?:bei|in)\\s*(?P<value>[^\\n]{2,80})"
+  # Abholcode/TAN.
+  pickup_code:
+    - "abholcode:?\\s*(?P<value>[A-Z0-9]{4,12})"
+  # Zieladresse im Originalwortlaut — Grundlage der Zuordnung in Step 1.5.
+  destination_raw:
+    - "lieferadresse:?\\s*(?P<value>[^\\n]{5,120})"

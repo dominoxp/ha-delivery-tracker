@@ -1,8 +1,8 @@
 """Delivery Tracker — Paketverfolgung aus E-Mails und APIs.
 
-In diesem Schritt ist der Entry noch leer: Er wird angelegt, laedt (noch) keine
-Plattformen und laesst sich rueckstandsfrei wieder entladen. Coordinator,
-Persistenz und Entities kommen in den spaeteren Steps dazu.
+In diesem Schritt richtet der Entry nur die Carrier-Registry ein: Er laedt (noch)
+keine Plattformen und laesst sich rueckstandsfrei wieder entladen. Coordinator,
+Quellen und Entities kommen in den spaeteren Steps dazu.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from .carriers import async_get_registry
 from .const import PLATFORMS
 
 _LOGGER = logging.getLogger(__name__)
@@ -20,6 +21,11 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Einen Config-Entry aufbauen."""
     _LOGGER.debug("Delivery Tracker wird eingerichtet: %s", entry.title)
+
+    # Discovery laeuft nur beim allerersten Aufruf; danach kommt der Cache.
+    registry = await async_get_registry(hass)
+    _LOGGER.debug("Carrier-Plugins verfuegbar: %s", ", ".join(registry.carrier_ids) or "keine")
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     return True
