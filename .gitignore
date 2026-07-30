@@ -1,4 +1,4 @@
-setup-docs/
+setup-docs/Home-Assistant-Mail-And-Packages
 
 # Python
 __pycache__/
@@ -13,6 +13,12 @@ dist/
 # Card-Toolchain
 card/node_modules/
 card/dist/
+
+# Echte Mails und ihre Klartext-Fassung. Sie tragen Namen, Adressen und die
+# personalisierten Tokens der Versanddienstleister — anonymisiert wird beim
+# Bau der Fixtures unter tests/fixtures/emails/.
+tools/emails/
+tools/klartext/
 
 # Editor / OS
 .idea/
