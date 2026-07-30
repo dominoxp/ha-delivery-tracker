@@ -1,0 +1,29 @@
+Return-Path: <shipment-tracking@amazon.de>
+From: "Amazon Logistics" <shipment-tracking@amazon.de>
+To: max.mustermann@example.org
+Subject: Dein Paket kommt heute
+Date: Tue, 28 Jul 2026 09:05:00 +0200
+Message-ID: <amazon-logistics@amazon.de>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+Meine Bestellungen
+https://www.amazon.de/gp/css/order-history?ref_=fed_yo_default
+    Dein Paket ist heute unterwegs
+Bestellt
+Versendet
+In Zustellung
+Zugestellt
+Zustellung: heute zwischen 14 und 18 Uhr
+Musterstraße 1, 12345 Musterstadt
+Bestellnr.
+303-1234567-1234567
+Sendungsnummer: TBA123456789012
+Sendung verfolgen
+https://track.amazon.de/tracking/TBA123456789012
+* Kabelloses Ladegerät 15 W, schwarz
+  Menge: 1
+  24.99 EUR
+Datenschutzerklärung https://www.amazon.de/gp/help/customer/display.html?nodeId=201909010
+Amazon.de

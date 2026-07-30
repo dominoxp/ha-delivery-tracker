@@ -1,0 +1,21 @@
+Return-Path: <noreply@dhl.de>
+From: DHL Paket <noreply@dhl.de>
+To: max.mustermann@example.org
+Subject: Ihre Sendung wurde beim Nachbarn abgegeben
+Date: Thu, 30 Jul 2026 14:20:00 +0200
+Message-ID: <dhl-nachbar@dhl.de>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+Guten Tag Max Mustermann,
+
+wir haben Sie nicht erreicht und Ihre Sendung deshalb bei Ihrem Nachbarn
+abgegeben.
+
+Sendungsnummer: 00340434161094042717
+Nachbar: Familie Beispiel, Musterstraße 3, 12345 Musterstadt
+Absender: Kaffeerösterei Nord
+
+Mit freundlichen Grüßen
+DHL Paket GmbH

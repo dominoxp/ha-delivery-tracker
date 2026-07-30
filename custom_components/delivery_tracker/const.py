@@ -46,6 +46,10 @@ IMAP_BACKOFF_FACTOR: Final = 2.0
 # Obergrenze der Event-Historie je Sendung, damit der Store nicht unbegrenzt waechst.
 MAX_EVENTS_PER_SHIPMENT: Final = 50
 
+# Obergrenze der Artikelliste je Sendung. Ein Paket mit mehr Positionen gibt es,
+# aber fuer die Zuordnung in Step 3.2 reichen die ersten.
+MAX_ITEMS_PER_SHIPMENT: Final = 20
+
 # IDs der Datenquellen (Werte landen in `SourceRecord.source_id`).
 SOURCE_IMAP: Final = "imap"
 SOURCE_SEVENTEENTRACK: Final = "seventeentrack"

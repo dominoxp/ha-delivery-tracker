@@ -1,0 +1,164 @@
+# Regelsatz DHL Paket.
+#
+# Der zweite Regelsatz dieses Plugins (`deutsche_post.yaml`) deckt die
+# Briefsendungen ab; welcher von beiden eine Mail auswertet, entscheidet die
+# Bewertung. Aufbau und Bedeutung aller Felder stehen in `carriers/example/`.
+
+carrier: dhl
+name: DHL Paket
+
+match:
+  # Deutsche Post und DHL versenden aus denselben Domains — die Domain allein
+  # sagt deshalb nichts darueber, welcher Regelsatz gemeint ist.
+  from_domains:
+    - dhl.de
+    - dhl.com
+    - deutschepost.de
+    - paket.de
+  subject_patterns:
+    - "\\bdhl\\b"
+    - "ihre sendung"
+    - "ihr paket"
+    - "sendungsank(?:ue|[uü])ndigung"
+    - "packstation"
+    - "zustellversuch"
+    - "r(?:ue|[uü])cksendung"
+  body_patterns:
+    - "dhl paket gmbh"
+    - "deutsche post dhl"
+    - "sendungsnummer"
+    - "packstation"
+    - "paketshop"
+    - "postnummer"
+  newsletter_patterns:
+    - "dhl newsletter"
+    - "unsere angebote"
+    - "jetzt (?:entdecken|shoppen|sichern)"
+    - "gewinnspiel"
+    - "\\d+\\s*%\\s*rabatt"
+
+tracking:
+  # DHL nennt seine Nummern in den Mails selten mit Praefix; die Formate sind
+  # die 20-stellige NVE, der 12-stellige Identcode und die international
+  # gebraeuchlichen JJD-/JVGL-Nummern. Die Nummer steht haeufig nur im
+  # `piececode`-Parameter des Verfolgen-Links — daher die nackten Muster.
+  patterns:
+    - "\\b(\\d{20})\\b"
+    - "\\b(\\d{12})\\b"
+    - "\\b(JJD\\d{14,18})\\b"
+    - "\\b(JVGL\\d{14,18})\\b"
+  url: "https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode={tracking_number}"
+  # NVE nach GS1, Identcode nach dem Verfahren der Deutschen Post. Beide
+  # Verfahren halten sich bei fremden Formaten heraus.
+  checksum:
+    - gs1
+    - deutsche_post
+  # Nackte Ziffernfolgen ohne Pruefziffer (JJD/JVGL) brauchen ein
+  # ankuendigendes Wort — sonst wird jede Rechnungsnummer zur Sendung.
+  require_context: true
+
+# Ausgewertet wird von oben nach unten. `label_created` steht bewusst vor
+# `in_transit`: „Sendungsankuendigung" ist das genauere Signal als das in
+# derselben Mail uebliche „ist unterwegs".
+status_map:
+  - status: delivered
+    patterns:
+      - "wurde (?:heute |erfolgreich |soeben )*(?:an sie )?zugestellt"
+      - "haben wir (?:ihre sendung |ihr paket )?(?:heute )?zugestellt"
+      - "zustellung war erfolgreich"
+      - "(?:beim|bei ihrem) nachbarn abgegeben"
+      - "an (?:einen|ihren) nachbarn [uü]bergeben"
+  - status: delivery_failed
+    patterns:
+      - "konnten wir[^\\n]{0,40}nicht zustellen"
+      - "zustellversuch[^\\n]{0,30}(?:nicht erfolgreich|erfolglos|gescheitert)"
+      - "nicht angetroffen"
+  - status: returned
+    patterns:
+      # Auch die Retouren-Ankuendigung faellt hierunter: Sobald das Paket den
+      # Weg zurueck antritt, ist es fuer den Empfaenger abgeschlossen.
+      - "(?:geht|senden wir)[^\\n]{0,30}an den absender zur[uü]ck"
+      - "r(?:ue|[uü])cksendung[^\\n]{0,30}(?:angek(?:ue|[uü])ndigt|angemeldet|vorbereitet)"
+      - "retoure[^\\n]{0,30}(?:angek(?:ue|[uü])ndigt|angemeldet|erstellt)"
+      - "retourenschein[^\\n]{0,20}(?:liegt bereit|erstellt)"
+  - status: ready_for_pickup
+    patterns:
+      - "liegt[^\\n]{0,40}(?:zur abholung|abholbereit)"
+      - "(?:zur abholung|abholbereit)[^\\n]{0,20}bereit"
+      - "k[oö]nnen sie[^\\n]{0,60}abholen"
+      - "(?:in|an) (?:ihre[rn]?|die) packstation[^\\n]{0,30}(?:zugestellt|gelegt|eingelagert)"
+      - "in (?:ihre[rn]?|der|die) filiale[^\\n]{0,30}(?:zugestellt|abgegeben|hinterlegt)"
+  - status: out_for_delivery
+    patterns:
+      - "ist in zustellung"
+      - "kommt heute"
+      # DHL schiebt zwischen „wird" und „zugestellt" gern halbe Saetze ein:
+      # „wird Ihnen heute durch Ihre Paketzustellkraft zugestellt".
+      - "wird[^\\n]{0,40}\\bheute\\b[^\\n]{0,60}zugestellt"
+      - "ist heute[^\\n]{0,30}unterwegs"
+      - "zusteller[^\\n]{0,40}unterwegs"
+  - status: delayed
+    patterns:
+      - "verz[oö]gert"
+      - "versp[aä]tet"
+      - "sp[aä]ter als (?:geplant|angek[uü]ndigt)"
+  - status: label_created
+    patterns:
+      - "sendungsank(?:ue|[uü])ndigung"
+      - "elektronisch angek(?:ue|[uü])ndigt"
+      - "hat uns[^\\n]{0,30}beauftragt"
+      - "auftragsdaten[^\\n]{0,30}[uü]bermittelt"
+  - status: in_transit
+    patterns:
+      - "ist unterwegs"
+      - "auf dem weg zu ihnen"
+      - "befindet sich auf dem weg"
+      - "wurde von uns bearbeitet"
+      - "im paketzentrum"
+
+# Reihenfolge = Vorrang: Das erste Muster, das ueberhaupt etwas findet, liefert
+# den Text fuer die Datumsauswertung. Genaues gehoert deshalb nach oben.
+dates:
+  eta_patterns:
+    - "zustellzeitfenster:?\\s*(?P<value>[^\\n]{3,90})"
+    # „Ihr neuer voraussichtlicher Zustelltag ist" — das Datum steht in der
+    # naechsten Zeile, deshalb hier bewusst ein Umbruch-freundliches `\s*`.
+    - "(?:zustelltag|liefertermin|zustelltermin) ist\\s*(?P<value>[^\\n]{3,90})"
+    - "voraussichtlich(?:e[rsn]?)?\\s*(?:zustellung|lieferung|liefertermin|ankunft|zustelltag)?:?\\s*(?P<value>[^\\n]{3,90})"
+    - "wird\\s+(?P<value>[^\\n]{3,80}?)\\s+zugestellt"
+    - "(?:neuer\\s+)?(?:wunschtag|zustelltag)[^\\n]{0,20}:\\s*(?P<value>[^\\n]{3,90})"
+    - "zustellung\\s*(?:am|:)\\s*(?P<value>[^\\n]{3,90})"
+    - "n[aä]chste[rn]?\\s+zustellversuch:?\\s*(?P<value>[^\\n]{3,60})"
+  # Nur waagerechter Leerraum vor dem Wert: Sonst zieht ein „zugestellt" am
+  # Zeilenende den Text der naechsten Zeile herein, in dem kein Datum steht.
+  delivered_patterns:
+    - "zugestellt[^\\S\\n]*(?:am|um)[^\\S\\n]*(?P<value>[^\\n]{3,60})"
+    - "zustellung erfolgte[^\\S\\n]*(?:am)?[^\\S\\n]*(?P<value>[^\\n]{3,60})"
+
+fields:
+  sender:
+    - "absender:?\\s*(?P<value>[^\\n]{2,60})"
+    - "im auftrag von\\s*(?P<value>[^\\n]{2,60})"
+    - "versender:?\\s*(?P<value>[^\\n]{2,60})"
+  description:
+    - "inhalt:?\\s*(?P<value>[^\\n]{2,80})"
+  # DHL nennt die Bestellnummer des Haendlers, wenn der Versender sie mitgibt —
+  # sie ist das Bindeglied zur Bestellbestaetigung (Step 3.2).
+  order_number:
+    - "bestellnummer:?\\s*(?P<value>[A-Z0-9][A-Z0-9-]{4,29})"
+  # Abholort und Abholcode bleiben getrennte Felder: Der Ort gehoert ins
+  # Dashboard, der Code ist ein Geheimnis und wird nicht mit angezeigt.
+  # Filiale und Paketshop nur mit Nummer: „geben Sie das Paket in einer Filiale
+  # ab" nennt keinen Abholort, sondern eine Abgabestelle fuer die Retoure.
+  pickup_location:
+    - "abholort:?\\s*(?P<value>[^\\n]{2,80})"
+    - "(?P<value>packstation\\s*\\d{1,4}[^\\n]{0,70})"
+    - "(?P<value>(?:post)?filiale\\s*\\d{1,4}[^\\n]{0,70})"
+    - "(?P<value>paketshop\\s*\\d{1,4}[^\\n]{0,70})"
+    - "nachbarn?[^\\n]{0,20}:\\s*(?P<value>[^\\n]{2,80})"
+    - "abholen (?:bei|in|im)\\s*(?P<value>[^\\n]{2,80})"
+  pickup_code:
+    - "abhol-?code:?\\s*(?P<value>\\d{4,12})"
+    - "\\btan:?\\s*(?P<value>\\d{4,12})"
+  destination_raw:
+    - "(?:liefer|zustell|empf[aä]nger)adresse:?\\s*(?P<value>[^\\n]{5,120})"

@@ -1,0 +1,21 @@
+Return-Path: <angebote@amazon.de>
+From: "Amazon.de" <angebote@amazon.de>
+To: max.mustermann@example.org
+Subject: Angebote des Tages: bis zu 40 % reduziert
+Date: Sat, 01 Aug 2026 06:00:00 +0200
+Message-ID: <amazon-werbung@amazon.de>
+List-Unsubscribe: <https://www.amazon.de/gp/gss/o/abmelden?id=abc123>
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+<html>
+<head><title>Amazon.de</title></head>
+<body>
+<p>Angebote des Tages</p>
+<p>Nur heute: bis zu 40 % reduziert auf ausgewählte Artikel.</p>
+<p><a href="https://www.amazon.de/dp/B0YYYYYYYY">Saugroboter mit Wischfunktion</a></p>
+<p><a href="https://www.amazon.de/dp/B0XXXXXXXX">Luftreiniger für große Räume</a></p>
+<p>Sie erhalten diese E-Mail, weil Sie sich für Angebote angemeldet haben.</p>
+</body>
+</html>

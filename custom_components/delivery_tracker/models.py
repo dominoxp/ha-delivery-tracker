@@ -222,6 +222,15 @@ class Shipment:
     """Adresse so, wie sie in der Mail stand — Grundlage der Zuordnung in Step 1.5."""
     sender: str | None = None
     description: str | None = None
+    items: list[str] = field(default_factory=list)
+    """Alle Artikel dieser Sendung, einzeln.
+
+    `description` ist der Anzeigetext („A (+2 weitere Artikel)"); hier stehen
+    die Namen unverkuerzt. Sie sind das zweite Bindeglied neben der
+    Bestellnummer: Amazon nennt dieselben Artikel in Versand- und Abholmail in
+    *verschiedener* Reihenfolge, und die Zustellmail nennt gar keinen. Erst die
+    vollstaendige Menge macht die Sendungen in Step 3.2 vergleichbar.
+    """
     order_number: str | None = None
     pickup_location: str | None = None
     pickup_code: str | None = None
@@ -296,6 +305,7 @@ class Shipment:
             "destination_raw": self.destination_raw,
             "sender": self.sender,
             "description": self.description,
+            "items": list(self.items),
             "order_number": self.order_number,
             "pickup_location": self.pickup_location,
             "pickup_code": self.pickup_code,
@@ -323,6 +333,7 @@ class Shipment:
             destination_raw=data.get("destination_raw"),
             sender=data.get("sender"),
             description=data.get("description"),
+            items=_str_list(data.get("items")),
             order_number=data.get("order_number"),
             pickup_location=data.get("pickup_location"),
             pickup_code=data.get("pickup_code"),

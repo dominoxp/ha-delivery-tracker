@@ -1,0 +1,133 @@
+# Regelsatz Amazon (Bestellung, Versand und Amazon Locker).
+#
+# Die Muster sind an echten Mails von 2026 gebaut, nicht an Vermutungen. Drei
+# Eigenheiten praegen sie:
+#
+# 1. Jede Mail traegt den Fortschrittsbalken „Bestellt / Versendet / In
+#    Zustellung / Zugestellt" als vier einzelne Textzeilen — in *jeder* Mail,
+#    unabhaengig vom tatsaechlichen Stand. Kein Muster darf auf eines dieser
+#    Woerter allein anspringen; verlangt wird immer ein ganzer Satz.
+# 2. Amazon duzt („Dein Paket wurde versendet"), aeltere Mails siezen.
+# 3. Trackingnummern gibt es nicht mehr. Anker ist die Bestellnummer plus die
+#    `shipmentId` aus dem Verfolgen-Link — das holt das Plugin (`__init__.py`).
+
+carrier: amazon
+name: Amazon
+
+match:
+  from_domains:
+    - amazon.de
+    - amazon.com
+    - marketplace.amazon.de
+  # „Ihr Paket" steht bewusst *nicht* hier: Das schreibt jeder Zusteller, und
+  # Amazon wuerde sich damit fuer fremde Mails zustaendig fuehlen.
+  subject_patterns:
+    - "amazon"
+    - "ihre bestellung"
+    - "deine bestellung"
+    - "bestellt:"
+    - "vers(?:andt|endet):"
+    - "abgeholt:"
+    - "zur abholung bereit"
+    - "wartet auf abholung"
+    - "versandbest[aä]tigung"
+    - "bestellbest[aä]tigung"
+  body_patterns:
+    - "amazon\\.de"
+    - "\\b\\d{3}-\\d{7}-\\d{7}\\b"
+    - "bestellnr"
+  # Nur eindeutige Werbe-Formate. „Empfehlungen fuer dich" steht auch unter
+  # echten Bestellbestaetigungen und darf sie nicht hart auf 0 setzen.
+  newsletter_patterns:
+    - "angebote des tages"
+    - "blitzangebote"
+    - "prime video"
+    - "amazon music unlimited"
+    - "jetzt (?:entdecken|shoppen|sichern)"
+    - "\\d+\\s*%\\s*(?:rabatt|reduziert|gespart)"
+
+tracking:
+  # Amazon Logistics vergibt in manchen Faellen noch `TBA`-Nummern; in den
+  # deutschen Mails steht dagegen gar keine. Fehlt sie, traegt die Sendung nur
+  # Bestellnummer und `shipmentId` — beides setzt das Plugin.
+  patterns:
+    - "\\b(TBA\\d{9,14})\\b"
+  url: "https://www.amazon.de/progress-tracker/package?trackingId={tracking_number}"
+  checksum: []
+  require_context: false
+
+status_map:
+  - status: delivered
+    patterns:
+      - "paket wurde abgeholt"
+      - "(?:heute|gestern) abgeholt"
+      - "(?:wurde|ist)\\s+(?:heute\\s+|soeben\\s+|erfolgreich\\s+)?(?:zugestellt|geliefert)"
+      - "haben wir\\s+(?:dir|ihnen)\\s+(?:heute\\s+)?zugestellt"
+      - "zustellung erfolgte"
+  - status: ready_for_pickup
+    patterns:
+      - "(?:ist|liegt)[^\\n]{0,30}zur abholung bereit"
+      - "wartet auf abholung"
+      - "kann(?:st du|nst du| es)?[^\\n]{0,30}abgeholt werden"
+      - "zur abholung bereit"
+  - status: delayed
+    patterns:
+      - "versp[aä]tet"
+      - "zu verz[oö]gerungen"
+      - "verz[oö]gert sich"
+      - "sp[aä]ter als (?:erwartet|geplant|urspr[uü]nglich)"
+      - "neuer (?:voraussichtlicher )?(?:liefertermin|zustelltag)"
+  - status: out_for_delivery
+    patterns:
+      - "kommt heute"
+      - "wird heute[^\\n]{0,40}(?:zugestellt|geliefert)"
+      - "ist heute[^\\n]{0,30}unterwegs"
+  - status: in_transit
+    patterns:
+      - "paket wurde vers(?:andt|endet)"
+      - "(?:wurde|wurden)[^\\n]{0,20}vers(?:andt|endet)"
+      - "ist unterwegs"
+      - "auf dem weg"
+  - status: ordered
+    patterns:
+      - "vielen dank f[uü]r (?:deine|ihre) bestellung"
+      - "wir haben (?:deine|ihre) bestellung erhalten"
+      - "(?:deine|ihre) bestellung ist eingegangen"
+      - "empfangsbest[aä]tigung (?:deiner|ihrer) bestellung"
+
+# Ueberall nur waagerechter Leerraum vor dem Wert: Stuende hier `\s*`, wuerde
+# das „Zustellung" des Fortschrittsbalkens den Umbruch fressen und das darunter
+# stehende „Zugestellt" als Liefertermin ausgeben.
+dates:
+  eta_patterns:
+    - "abholung am[^\\S\\n]*(?P<value>[^\\n]{3,60})"
+    - "(?:zustellung|lieferung|ankunft)[^\\S\\n]*:?[^\\S\\n]*(?P<value>[^\\n]{3,60})"
+    - "zustelltag ist\\s*(?P<value>[^\\n]{3,60})"
+    - "(?:kommt|liefern wir)[^\\S\\n]*(?P<value>(?:heute|morgen|[uü]bermorgen|am\\s)[^\\n]{0,60})"
+  # „Heute abgeholt" traegt keine Uhrzeit; ohne eigenes Datum gilt ohnehin der
+  # Zeitpunkt der Mail, und der ist genauer.
+  delivered_patterns:
+    - "zugestellt[^\\S\\n]*(?:am|um)[^\\S\\n]*(?P<value>[^\\n]{3,60})"
+
+fields:
+  sender:
+    - "verkauft (?:und versandt )?(?:von|durch):?[^\\S\\n]*(?P<value>[^\\n]{2,60})"
+  # Die Artikelzeilen holt das Plugin selbst — sie stehen als Liste ohne
+  # Beschriftung im Text.
+  description:
+    - "artikel:[^\\S\\n]*(?P<value>[^\\n]{3,90})"
+  # Die Bestellnummer wird immer mitgefuehrt, auch neben einer Trackingnummer:
+  # Sie ist das Bindeglied, ueber das Step 3.2 Bestellung und Sendung
+  # zusammenfuehrt. Das Format ist eindeutig genug fuer das nackte Muster —
+  # in den Mails steht die Nummer eine Zeile *unter* „Bestellnr.".
+  order_number:
+    - "\\b(?P<value>\\d{3}-\\d{7}-\\d{7})\\b"
+  # Amazon Locker, Hub und Counter sind Abholorte; die Anschrift steht in
+  # derselben Zeile.
+  pickup_location:
+    - "(?P<value>amazon (?:locker|hub|counter)[^\\n]{0,110})"
+  # Der Abholcode steht nur im Ziel des „Abholung starten"-Links.
+  pickup_code:
+    - "accesscode=(?P<value>[A-Za-z0-9]{4,12})"
+  destination_raw:
+    - "(?:liefer|versand)adresse:?[^\\S\\n]*(?P<value>[^\\n]{5,120})"

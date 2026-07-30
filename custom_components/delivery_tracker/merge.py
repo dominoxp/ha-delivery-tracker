@@ -13,7 +13,12 @@ from __future__ import annotations
 import re
 from typing import Any, Final
 
-from .const import DEFAULT_SOURCE_PRIORITY, MAX_EVENTS_PER_SHIPMENT, SOURCE_PRIORITIES
+from .const import (
+    DEFAULT_SOURCE_PRIORITY,
+    MAX_EVENTS_PER_SHIPMENT,
+    MAX_ITEMS_PER_SHIPMENT,
+    SOURCE_PRIORITIES,
+)
 from .models import (
     REGRESSION_STATUSES,
     Shipment,
@@ -49,11 +54,17 @@ def build_shipment_id(
     *,
     sender: str | None = None,
     order_number: str | None = None,
+    package: str | None = None,
 ) -> str:
     """Die stabile ID einer Sendung bilden.
 
     Ohne Trackingnummer (reine Bestellbestaetigung) wird sie aus Haendler und
     Bestellnummer abgeleitet, damit die Bestellung ueberhaupt einen Anker hat.
+
+    `package` unterscheidet mehrere Pakete derselben Bestellung. Amazon zum
+    Beispiel vergibt gar keine Trackingnummern mehr, sondern nur eine
+    `shipmentId` je Paket — ohne diesen Zusatz wuerden die vier Pakete einer
+    Bestellung zu einer einzigen Sendung verschmelzen.
 
     Achtung: Die spaetere Versandmail bekommt dann eine *andere*, nummernbasierte
     ID und rastet **nicht** von selbst auf die Bestellung ein — `merge_shipments`
@@ -68,8 +79,11 @@ def build_shipment_id(
             return f"{carrier_slug}_{token}"
 
     if order_number:
-        parts = [carrier_slug, "order", _slug(sender), _slug(order_number)]
+        parts = [carrier_slug, "order", _slug(sender), _slug(order_number), _slug(package)]
         return "_".join(part for part in parts if part)
+
+    if package:
+        return f"{carrier_slug}_{_slug(package)}"
 
     raise ValueError("Sendungs-ID braucht eine Trackingnummer oder eine Bestellnummer")
 
@@ -162,6 +176,30 @@ def merge_events(
     return merged
 
 
+def merge_items(
+    current: list[str],
+    incoming: list[str],
+    *,
+    limit: int = MAX_ITEMS_PER_SHIPMENT,
+) -> list[str]:
+    """Artikellisten vereinigen statt ersetzen.
+
+    Keine Quelle nennt bewusst *weniger* Artikel — eine kuerzere Liste ist
+    Informationsmangel, kein Widerspruch. Amazon zaehlt dieselben Artikel in
+    Versand- und Abholmail zudem in verschiedener Reihenfolge auf, und die
+    Zustellmail nennt gar keinen. Die erste Nennung bestimmt die Reihenfolge.
+    """
+    merged: dict[str, str] = {}
+    for item in [*current, *incoming]:
+        text = " ".join(item.split())
+        key = text.casefold()
+        if key and key not in merged:
+            merged[key] = text
+        if len(merged) >= limit:
+            break
+    return list(merged.values())
+
+
 def merge_sources(current: list[SourceRecord], incoming: list[SourceRecord]) -> list[SourceRecord]:
     """Je Quelle den juengsten Nachweis behalten."""
     by_source: dict[str, SourceRecord] = {}
@@ -203,6 +241,7 @@ def merge_shipments(current: Shipment, incoming: Shipment) -> Shipment:
         destination_raw=_pick(current.destination_raw, incoming.destination_raw, wins),
         sender=_pick(current.sender, incoming.sender, wins),
         description=_pick(current.description, incoming.description, wins),
+        items=merge_items(current.items, incoming.items),
         order_number=_pick(current.order_number, incoming.order_number, wins),
         pickup_location=_pick(current.pickup_location, incoming.pickup_location, wins),
         pickup_code=_pick(current.pickup_code, incoming.pickup_code, wins),

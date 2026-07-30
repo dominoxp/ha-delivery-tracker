@@ -1,0 +1,26 @@
+Return-Path: <noreply@dhl.de>
+From: DHL Paket <noreply@dhl.de>
+To: max.mustermann@example.org
+Subject: Ihr Paket kommt heute
+Date: Wed, 29 Jul 2026 07:10:00 +0200
+Message-ID: <dhl-zeitfenster@dhl.de>
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+<html>
+<head><title>DHL</title></head>
+<body>
+<div>
+<p>Guten Tag Max Mustermann,</p>
+<p>Ihre Sendung ist in Zustellung.</p>
+<table>
+<tr><td>Zustellzeitfenster:</td><td>heute zwischen 14 und 18 Uhr</td></tr>
+<tr><td>Absender:</td><td>Kaffeerösterei Nord</td></tr>
+</table>
+<p><a href="https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=00340434161094042632">Sendung verfolgen</a></p>
+<img src="https://www.dhl.de/o.gif?id=abc123" width="1" height="1" alt="">
+<p>Mit freundlichen Grüßen<br>DHL Paket GmbH</p>
+</div>
+</body>
+</html>

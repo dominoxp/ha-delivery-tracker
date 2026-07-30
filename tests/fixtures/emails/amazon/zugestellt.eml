@@ -1,0 +1,30 @@
+Return-Path: <shipment-tracking@amazon.de>
+From: "Amazon.de" <shipment-tracking@amazon.de>
+To: max.mustermann@example.org
+Subject: Dein Paket wurde zugestellt
+Date: Tue, 28 Jul 2026 15:02:00 +0200
+Message-ID: <amazon-zugestellt@amazon.de>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+Meine Bestellungen
+https://www.amazon.de/gp/css/order-history?ref_=fed_yo_default
+    Dein Paket wurde zugestellt
+Bestellt
+Versendet
+In Zustellung
+Zugestellt
+Zustellung: Dienstag
+Musterstraße 1, 12345 Musterstadt
+Bestellnr.
+303-1234567-1234567
+Bestelldetails anzeigen
+https://www.amazon.de/progress-tracker/package?_encoding=UTF8&orderId=303-1234567-1234567&packageIndex=0&shipmentId=Sh4tPkG02&vt=NOTIFICATIONS&ref_=p_btn_fed_track_package
+* USB-C Kabel 2 m, geflochten
+  Menge: 2
+  12.49 EUR
+Um Artikel zurückzusenden oder zu ersetzen, gehe zu Meine Bestellungen
+https://www.amazon.de/your-orders/orders?ref_=pdc_yo
+Datenschutzerklärung https://www.amazon.de/gp/help/customer/display.html?nodeId=201909010
+Amazon.de

@@ -1,0 +1,25 @@
+Return-Path: <noreply@dhl.de>
+From: DHL Paket <noreply@dhl.de>
+To: max.mustermann@example.org
+Subject: Ihre Sendung liegt in Ihrer Packstation bereit
+Date: Thu, 30 Jul 2026 11:45:00 +0200
+Message-ID: <dhl-packstation@dhl.de>
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+<html>
+<head><title>DHL Packstation</title></head>
+<body>
+<p>Guten Tag Max Mustermann,</p>
+<p>Ihre Sendung wurde in Ihre Packstation zugestellt und liegt dort zur Abholung bereit.</p>
+<table>
+<tr><td>Sendungsnummer:</td><td>00340434161094042632</td></tr>
+<tr><td>Abholort:</td><td>Packstation 123, Musterstraße 5, 12345 Musterstadt</td></tr>
+<tr><td>Abholcode:</td><td>483920</td></tr>
+<tr><td>Abholung bis:</td><td>02.08.2026</td></tr>
+</table>
+<p><a href="https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=00340434161094042632">Sendung verfolgen</a></p>
+<p>DHL Paket GmbH</p>
+</body>
+</html>

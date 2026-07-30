@@ -31,7 +31,8 @@ def _full_shipment() -> Shipment:
         destination_id="zuhause",
         destination_raw="Musterstrasse 1, 12345 Musterstadt",
         sender="Amazon",
-        description="Kaffeebohnen 1kg",
+        description="Kaffeebohnen 1kg (+1 weiterer Artikel)",
+        items=["Kaffeebohnen 1kg", "Filtertüten Größe 4"],
         order_number="302-1234567-1234567",
         pickup_location="Packstation 123",
         pickup_code="9876",
@@ -83,6 +84,9 @@ def test_shipment_roundtrip():
     assert restored.eta_start.utcoffset().total_seconds() == 0
     assert restored.events[0].location == "Hamburg"
     assert restored.sources[0].reference == "<abc@mail.example>"
+    # Die Artikelliste ist das Bindeglied fuer Step 3.2 und darf nicht
+    # unterwegs verloren gehen.
+    assert restored.items == ["Kaffeebohnen 1kg", "Filtertüten Größe 4"]
 
 
 def test_roundtrip_mit_leeren_listen_und_none():
@@ -99,6 +103,7 @@ def test_roundtrip_mit_leeren_listen_und_none():
     assert restored == shipment
     assert restored.events == []
     assert restored.sources == []
+    assert restored.items == []
     assert restored.tracking_number is None
     assert restored.status is ShipmentStatus.UNKNOWN
 

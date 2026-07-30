@@ -1,0 +1,85 @@
+# Zweiter Regelsatz dieses Plugins: Deutsche Post (Briefsendungen).
+#
+# Gleiche Carrier-ID wie `rules.yaml` — in der Oberflaeche sind DHL und
+# Deutsche Post ein Zusteller, und eine Sendung soll ihre ID nicht wechseln,
+# nur weil ein anderer Regelsatz sie ausgewertet hat. Getrennt sind lediglich
+# Nummernformat, Pruefverfahren und Wortwahl.
+
+carrier: dhl
+name: Deutsche Post
+
+match:
+  from_domains:
+    - deutschepost.de
+    - dhl.de
+    - post.de
+  # Bewusst eng: Diese Woerter kommen in einer Paketmail nicht vor, sonst
+  # wuerde dieser Regelsatz dem Paket-Regelsatz die Mails wegnehmen.
+  subject_patterns:
+    - "einschreiben"
+    - "briefsendung"
+    - "nachnahme"
+    - "ihre postsendung"
+  body_patterns:
+    - "deutsche post ag"
+    - "einschreiben"
+    - "briefsendung"
+    - "benachrichtigungskarte"
+
+tracking:
+  # Einschreiben tragen die international ueblichen Buchstaben-Nummern,
+  # Nachnahme- und Warensendungen den 12-stelligen Identcode.
+  patterns:
+    - "\\b([A-Z]{2}\\d{9}DE)\\b"
+    - "\\b(\\d{12})\\b"
+  url: "https://www.deutschepost.de/sendung/simpleQuery.html?form.sendungsnummer={tracking_number}"
+  checksum:
+    - deutsche_post
+  require_context: true
+
+status_map:
+  - status: delivered
+    patterns:
+      - "wurde (?:heute )?(?:an sie )?zugestellt"
+      - "(?:erfolgreich )?[uü]bergeben"
+      - "haben wir (?:ihnen )?zugestellt"
+  - status: ready_for_pickup
+    patterns:
+      - "liegt[^\\n]{0,40}(?:zur abholung|abholbereit)"
+      - "k[oö]nnen sie[^\\n]{0,60}abholen"
+      - "in (?:der|ihrer) (?:post)?filiale[^\\n]{0,30}(?:hinterlegt|abgegeben)"
+  - status: delivery_failed
+    patterns:
+      - "nicht angetroffen"
+      - "benachrichtigungskarte"
+      - "konnten wir[^\\n]{0,40}nicht zustellen"
+  - status: returned
+    patterns:
+      - "(?:geht|senden wir)[^\\n]{0,30}an den absender zur[uü]ck"
+  - status: label_created
+    patterns:
+      - "elektronisch angek[uü]ndigt"
+      - "eingeliefert"
+  - status: in_transit
+    patterns:
+      - "ist unterwegs"
+      - "auf dem weg zu ihnen"
+
+dates:
+  eta_patterns:
+    - "voraussichtlich(?:e[rsn]?)?\\s*(?:zustellung|lieferung|zustelltag)?:?\\s*(?P<value>[^\\n]{3,90})"
+    - "zustellung\\s*(?:am|:)\\s*(?P<value>[^\\n]{3,90})"
+  delivered_patterns:
+    - "zugestellt[^\\S\\n]*(?:am|um)[^\\S\\n]*(?P<value>[^\\n]{3,60})"
+
+fields:
+  sender:
+    - "absender:?\\s*(?P<value>[^\\n]{2,60})"
+  pickup_location:
+    - "abholort:?\\s*(?P<value>[^\\n]{2,80})"
+    - "(?P<value>(?:post)?filiale\\s*\\d{1,4}[^\\n]{0,70})"
+    - "abholen (?:bei|in|im)\\s*(?P<value>[^\\n]{2,80})"
+  pickup_code:
+    - "abhol-?code:?\\s*(?P<value>\\d{4,12})"
+  destination_raw:
+    - "(?:liefer|zustell|empf[aä]nger)adresse:?\\s*(?P<value>[^\\n]{5,120})"

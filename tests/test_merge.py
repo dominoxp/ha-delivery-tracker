@@ -6,6 +6,7 @@ import pytest
 
 from custom_components.delivery_tracker.const import (
     MAX_EVENTS_PER_SHIPMENT,
+    MAX_ITEMS_PER_SHIPMENT,
     SOURCE_IMAP,
     SOURCE_SEVENTEENTRACK,
 )
@@ -13,6 +14,7 @@ from custom_components.delivery_tracker.merge import (
     build_shipment_id,
     has_status_changed,
     merge_events,
+    merge_items,
     merge_shipments,
     tracking_id_token,
 )
@@ -62,6 +64,51 @@ def _api_shipment(**overrides: object) -> Shipment:
     }
     values.update(overrides)
     return Shipment(**values)  # type: ignore[arg-type]
+
+
+def test_merge_items_vereinigt_statt_zu_ersetzen():
+    """Keine Quelle nennt bewusst weniger Artikel — eine kuerzere Liste fehlt nur.
+
+    Amazon zaehlt dieselben Artikel in Versand- und Abholmail in verschiedener
+    Reihenfolge auf; die Vereinigung macht beide Sichten vergleichbar.
+    """
+    versand = ["USB-C Kabel 2 m", "Schutzhülle transparent"]
+    abholung = ["Schutzhülle transparent", "USB-C Kabel 2 m"]
+
+    merged = merge_items(versand, abholung)
+
+    assert merged == versand
+    assert merge_items(versand, []) == versand
+    assert merge_items([], abholung) == abholung
+
+
+def test_merge_items_ergaenzt_fehlende_artikel():
+    """Kennt eine Sicht einen Artikel mehr, bleibt er erhalten."""
+    merged = merge_items(["Kabel"], ["Hülle", "Kabel", "Adapter"])
+
+    assert merged == ["Kabel", "Hülle", "Adapter"]
+
+
+def test_merge_items_ignoriert_schreibweise_und_leerraum():
+    """Dieselbe Bezeichnung darf nicht doppelt in der Liste landen."""
+    assert merge_items(["USB-C  Kabel"], ["usb-c kabel"]) == ["USB-C Kabel"]
+
+
+def test_merge_items_wird_gedeckelt():
+    """Eine sehr grosse Bestellung darf den Store nicht aufblaehen."""
+    viele = [f"Artikel {index}" for index in range(MAX_ITEMS_PER_SHIPMENT + 10)]
+
+    assert len(merge_items(viele, [])) == MAX_ITEMS_PER_SHIPMENT
+
+
+def test_merge_shipments_fuehrt_artikellisten_zusammen():
+    """Beim Zusammenfuehren zweier Sichten bleiben alle Artikel erhalten."""
+    merged = merge_shipments(
+        _mail_shipment(items=["Kaffeebohnen 1kg"]),
+        _api_shipment(items=["Filtertüten", "Kaffeebohnen 1kg"]),
+    )
+
+    assert merged.items == ["Kaffeebohnen 1kg", "Filtertüten"]
 
 
 def test_normalisierte_trackingnummer_ergibt_stabile_id():
