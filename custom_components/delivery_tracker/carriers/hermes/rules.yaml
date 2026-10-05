@@ -1,0 +1,121 @@
+# Regelsatz Hermes.
+#
+# Hermes-Mails nennen die Sendungsnummer oft gar nicht im Text, sondern nur im
+# Ziel des „Sendungsverfolgung"-Buttons — dort als Fragment hinter `#`
+# (`…/sendungsinformation/?wt_cc1=button_sendungsnummer#H1022…`). Die Nummer
+# im Link ist hier also der Hauptpfad, nicht der Notbehelf.
+#
+# Die echten Mails von 2026 duzen („deine Sendung von Amazon") und setzen den
+# Abholort als mehrzeiligen Block unter „PaketShop". Aufbau und Bedeutung aller
+# Felder stehen in `carriers/example/`.
+
+carrier: hermes
+name: Hermes
+
+match:
+  from_domains:
+    - myhermes.de
+    - hermesworld.com
+    - hermes-europe.eu
+    - hermes-germany.de
+  subject_patterns:
+    - "\\bhermes\\b"
+  body_patterns:
+    - "hermes germany gmbh"
+    - "myhermes\\.de"
+    - "hermes paketshop"
+    - "ihr hermes[ -]team"
+  newsletter_patterns:
+    - "gewinnspiel"
+    - "jetzt (?:entdecken|shoppen|sichern)"
+    - "\\d+\\s*%\\s*rabatt"
+
+tracking:
+  # Formate: `H` + 19 Ziffern sowie rein numerische Nummern mit 14 oder 16
+  # Stellen. Ein Pruefverfahren ist nicht hinterlegt — die Nummer zaehlt nur
+  # mit Ankuendigung, und ein Link-Parameter wie `trackingnumber` ist eine.
+  patterns:
+    - "\\b(H\\d{19})\\b"
+    - "\\b(\\d{16})\\b"
+    - "\\b(\\d{14})\\b"
+  url: "https://www.myhermes.de/empfangen/sendungsverfolgung/sendungsinformation#{tracking_number}"
+  checksum: []
+  require_context: true
+
+status_map:
+  - status: delivered
+    patterns:
+      - "wurde (?:heute |erfolgreich )?(?:an sie )?zugestellt"
+      - "(?:an|bei) (?:ihren|ihrem|einen|einem) nachbarn[^\\n]{0,40}(?:zugestellt|abgegeben|[uü]bergeben)"
+      - "am (?:ablageort|wunschablageort)[^\\n]{0,30}abgelegt"
+  # Unterwegs zum PaketShop: „liegt in Kuerze zur Abholung bereit" ist noch
+  # nicht abholbereit und muss deshalb vor der Abhol-Regel stehen.
+  - status: in_transit
+    patterns:
+      - "in k[uü]rze[^\\n]{0,40}(?:hinterlegt|abholbereit|zur abholung)"
+      - "bald[^\\n]{0,30}abholbereit"
+  - status: ready_for_pickup
+    patterns:
+      - "liegt[^\\n]{0,60}(?:zur abholung|abholbereit)"
+      - "k[oö]nnen sie[^\\n]{0,60}abholen"
+      - "(?:im|in einem|in den) (?:hermes )?paketshop[^\\n]{0,40}(?:abgegeben|zugestellt|hinterlegt|eingetroffen)"
+  - status: delivery_failed
+    patterns:
+      - "nicht angetroffen"
+      - "konnten wir[^\\n]{0,40}nicht (?:zustellen|antreffen)"
+      - "zustellversuch[^\\n]{0,30}(?:nicht erfolgreich|erfolglos)"
+  - status: returned
+    patterns:
+      - "an den absender zur[uü]ck"
+  - status: delayed
+    patterns:
+      - "verz[oö]gert"
+      - "versp[aä]tet"
+  - status: out_for_delivery
+    patterns:
+      - "kommt heute"
+      - "wird heute[^\\n]{0,40}zugestellt"
+      - "ist in zustellung"
+  - status: label_created
+    patterns:
+      - "(?:hat|haben)[^\\n]{0,40}angek(?:ue|[uü])ndigt"
+      - "sendungsdaten[^\\n]{0,40}(?:[uü]bermittelt|erhalten)"
+  - status: in_transit
+    patterns:
+      - "(?:an|von) hermes [uü]bergeben"
+      - "auf dem weg zu ihnen"
+      - "ist unterwegs"
+
+dates:
+  eta_patterns:
+    # Echtes Layout: Beschriftung, Leerzeile, Datum — die Uhrzeit („ab 14:10
+    # Uhr") steht noch eine Zeile tiefer und bleibt aussen vor, ein „ab" ist
+    # kein Fenster.
+    - "voraussichtlich abholbereit am\\s*(?P<value>[^\\n]{3,60})"
+    - "zeitfenster:?\\s*(?P<value>[^\\n]{3,90})"
+    - "kommt[^\\S\\n]+(?P<value>(?:heute|morgen|[uü]bermorgen|am\\s)[^\\n]{0,80})"
+    - "voraussichtlich(?:e[rsn]?)?\\s*(?:zustellung|lieferung|zustelltag)?:?[^\\S\\n]*(?P<value>[^\\n]{3,90})"
+    - "zustellung\\s*(?:am|:)\\s*(?P<value>[^\\n]{3,90})"
+    - "n[aä]chste[rn]?\\s+zustellversuch[^\\S\\n]*(?:am|:)?[^\\S\\n]*(?P<value>[^\\n]{3,60})"
+  delivered_patterns:
+    - "zugestellt[^\\S\\n]*(?:am|um)[^\\S\\n]*(?P<value>[^\\n]{3,60})"
+
+fields:
+  # Der Doppelpunkt ist Pflicht — sonst wird aus „der Versender hat …" ein Name.
+  sender:
+    - "(?:absender|versender):\\s*(?P<value>[^\\n]{2,60})"
+    - "im auftrag von\\s*(?P<value>[^\\n]{2,60})"
+    # „Dein Hermes Paket von Amazon liegt …", „deine Sendung von Amazon ist …"
+    - "(?:sendung|paket) von (?P<value>[^\\n]{2,40}?) (?:ist|liegt|wird|kommt)\\b"
+  order_number:
+    - "bestellnummer:?\\s*(?P<value>[A-Z0-9][A-Z0-9-]{3,29})"
+  pickup_location:
+    - "abholort:?\\s*(?P<value>[^\\n]{2,80})"
+    # Echtes Layout: „PaketShop" allein auf einer Zeile, darunter Name, Strasse
+    # und Ort mit Leerzeilen dazwischen.
+    - "(?m)^paketshop[^\\S\\n]*\\n\\s*(?P<value>[^\\n]{2,60}\\n\\s*[^\\n]{2,60}\\n\\s*\\d{5}[^\\n]{2,40})"
+    - "nachbarn?[^\\n]{0,20}:\\s*(?P<value>[^\\n]{2,80})"
+  pickup_code:
+    - "abhol-?code:?\\s*(?P<value>[A-Z0-9]{4,12})"
+  destination_raw:
+    - "(?:liefer|zustell|empf[aä]nger)adresse:?\\s*(?P<value>[^\\n]{5,120})"

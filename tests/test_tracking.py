@@ -133,6 +133,25 @@ def test_unbekanntes_format_bleibt_unbewertet():
     assert checksum_result("", ALLE_VERFAHREN) is ChecksumResult.UNKNOWN
 
 
+@pytest.mark.parametrize(
+    ("nummer", "erwartet"),
+    [
+        # Das Beispiel aus der UPU-Norm S10.
+        ("RR123456785DE", ChecksumResult.VALID),
+        ("LX876543216NL", ChecksumResult.VALID),
+        ("RR123456786DE", ChecksumResult.INVALID),
+        # Die Sonderfaelle: 11 - 1 = 10 wird zu 0, 11 - 0 = 11 wird zu 5.
+        ("AA000040000CH", ChecksumResult.VALID),
+        ("AA000000005CH", ChecksumResult.VALID),
+        ("EX1234567890DE", ChecksumResult.UNKNOWN),
+        ("1Z999AA10123456784", ChecksumResult.UNKNOWN),
+    ],
+)
+def test_upu_s10_pruefziffer(nummer: str, erwartet: ChecksumResult):
+    """Internationale Postsendungen: Gewichtung 8-6-4-2-3-5-9-7, Modulo 11."""
+    assert checksum_result(nummer, [TrackingChecksum.UPU_S10]) is erwartet
+
+
 # ----------------------------------------------------------------------
 # Kontext
 # ----------------------------------------------------------------------
@@ -182,6 +201,13 @@ def test_gueltige_pruefziffer_schlaegt_schlechten_kontext():
     text = f"Rechnungsnummer: {UPS_OK}"
 
     assert find_tracking_numbers(text, [GENERISCH], schemes=ALLE_VERFAHREN) == [UPS_OK]
+
+
+def test_reine_ziffernfolge_kippt_den_schlechten_kontext_nicht():
+    """Bei Ziffern stimmt die Pruefziffer in jedem zehnten Fall zufaellig."""
+    text = f"Kundennummer: {NVE_OK}"
+
+    assert find_tracking_numbers(text, [GENERISCH], schemes=ALLE_VERFAHREN) == []
 
 
 def test_falsche_pruefziffer_verwirft_trotz_gutem_kontext():

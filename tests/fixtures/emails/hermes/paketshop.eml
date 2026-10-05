@@ -1,0 +1,38 @@
+From: Hermes Zustellbenachrichtigung <noreply@paketankuendigung.myhermes.de>
+To: max.mustermann@example.org
+Subject: Dein Hermes Paket von Amazon liegt im PaketShop zur Abholung bereit.
+Date: Thu, 19 Feb 2026 15:15:06 +0100
+Message-ID: <hermes-paketshop@paketankuendigung.myhermes.de>
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+<html>
+<body>
+<div style="display:none">Bitte bringe bei Abholung deinen gültigen Ausweis mit. Vielen Dank.</div>
+<p><a href="https://www.myhermes.de/?wt_cc1=logo&amp;wt_mc=re_zn2"><img src="https://www.myhermes.de/img/logo.png" alt=""></a></p>
+<p>Hallo,</p>
+<p>deine Sendung von Amazon ist im PaketShop<br>
+Schreibwaren Beispiel eingetroffen und liegt zur Abholung bereit.</p>
+<p>Bitte zeige bei der Abholung einen<br>
+gültigen Ausweis vor.</p>
+<p><a href="https://www.myhermes.de/empfangen/sendungsverfolgung/sendungsinformation/?wt_cc1=button_sendungsnummer&amp;wt_mc=re_zn2#H1001234567890123482"><img src="https://www.myhermes.de/img/button.png" alt=""></a></p>
+<p><a href="https://www.myhermes.de/empfangen/sendungsverfolgung/sendungsinformation/?wt_cc1=button_sendungsnummer&amp;wt_mc=re_zn2#H1001234567890123482">Sendungsverfolgung</a></p>
+<p>Sendungsnummer H1001234567890123482</p>
+<p>PaketShop</p>
+<p>Schreibwaren Beispiel</p>
+<p>Bahnhofstr. 2</p>
+<p>12345 Musterstadt</p>
+<p>Öffnungszeiten</p>
+<p>Mo. - So.</p>
+<p>06:00 - 23:59</p>
+<p>Hast du noch Fragen?</p>
+<p>Hier findest du Antworten rund um deine Zustellung.</p>
+<p><a href="https://www.myhermes.de/service/fragen/empfangen/?wt_cc1=faq&amp;wt_mc=re_zn2">Fragen und Antworten</a></p>
+<p>Hermes Germany GmbH</p>
+<p><a href="https://www.myhermes.de/impressum/?wt_cc1=imprint&amp;wt_mc=re_zn2">Impressum</a></p>
+<p><a href="https://www.myhermes.de/datenschutz/?wt_cc1=datenschutz&amp;wt_mc=re_zn2">Datenschutz</a></p>
+<p>Du möchtest keine weiteren Informationen zu deiner Sendung erhalten?</p>
+<p><a href="https://www.myhermes.de/empfangen/benachrichtigungen?wt_cc1=abmelden&amp;wt_mc=re_zn2">Hier klicken ❯</a></p>
+</body>
+</html>

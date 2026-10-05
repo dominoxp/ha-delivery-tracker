@@ -69,6 +69,7 @@ tracking:
   #   ups            UPS-Verfahren (`1Z` + 16 Zeichen)
   #   deutsche_post  Leitcode (14 Stellen) / Identcode (12 Stellen), Gewichte 4/9
   #   gs1            NVE/SSCC (18 oder 20 Stellen), Gewichte 3/1
+  #   upu_s10        internationale Postsendungen (`RR123456785DE`), UPU-Norm S10
   #
   # Ohne Angabe wird nicht geprueft. Der Kern raet bewusst nicht selbst, welches
   # Format zu welchem Verfahren gehoert: Zwoelf- und vierzehnstellige

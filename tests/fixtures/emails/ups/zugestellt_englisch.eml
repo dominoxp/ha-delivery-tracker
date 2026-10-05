@@ -1,0 +1,19 @@
+From: UPS <pkginfo@ups.com>
+To: max.mustermann@example.org
+Subject: UPS Update: Package Delivered
+Date: Thu, 30 Jul 2026 14:31:00 +0200
+Message-ID: <ups-delivered@ups.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+Hello Max Mustermann,
+
+Your package has been delivered.
+
+Tracking Number: 1Z0E12345678901253
+Delivered On: Thursday, 07/30/2026 at 2:15 PM
+Ship To: Musterstraße 1, 12345 Musterstadt, DE
+Shipped From: Kaffeerösterei Nord
+
+United Parcel Service of America, Inc.

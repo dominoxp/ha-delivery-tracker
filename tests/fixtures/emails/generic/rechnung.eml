@@ -1,0 +1,22 @@
+From: =?UTF-8?Q?Kaffeer=C3=B6sterei_Nord?= <rechnung@kaffee-nord.example>
+To: max.mustermann@example.org
+Subject: Ihre Rechnung zu Auftrag KN-2026-4713
+Date: Tue, 28 Jul 2026 10:05:00 +0200
+Message-ID: <shop-rechnung@kaffee-nord.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+Hallo Max Mustermann,
+
+anbei erhalten Sie Ihre Rechnung.
+
+Rechnungsnummer: 003400123456789019
+Kundennummer: 12345678901234567890
+Belegnummer: 00340434161094042810
+Vorgang: RR123456789DE
+
+Betrag: 24,90 EUR
+IBAN: DE02 1203 0000 0000 2020 51
+
+Kaffeerösterei Nord

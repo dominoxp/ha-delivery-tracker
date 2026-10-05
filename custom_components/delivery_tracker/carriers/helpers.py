@@ -148,8 +148,12 @@ def build_shipments_from_rules(
     *,
     source_id: str = SOURCE_IMAP,
     now: datetime | None = None,
+    tracking_numbers: Sequence[str] | None = None,
 ) -> list[Shipment]:
     """Aus Regeln und Mail alle enthaltenen Sendungen bauen.
+
+    `tracking_numbers` ersetzt die Nummernsuche der Regeln — fuer Plugins, die
+    strenger auswaehlen, als es die Regeln ausdruecken koennen (`generic`).
 
     Eine Sammelbestaetigung nennt mehrere Trackingnummern; jede davon ist eine
     eigene Sendung. Status, Liefertermin und Kontextfelder gelten dabei fuer alle
@@ -163,10 +167,14 @@ def build_shipments_from_rules(
     observed_at = mail.date or fetched_at
     text = mail.searchable_text
 
-    tracking_numbers = extract_tracking_numbers(rules, mail)
+    numbers = (
+        list(tracking_numbers)
+        if tracking_numbers is not None
+        else extract_tracking_numbers(rules, mail)
+    )
     values = extract_fields(rules, text)
     order_number = values.get("order_number")
-    if not tracking_numbers and not order_number:
+    if not numbers and not order_number:
         return []
 
     status, status_text = map_status(text, rules.status_map)
@@ -183,7 +191,7 @@ def build_shipments_from_rules(
     shipments: list[Shipment] = []
     # Ohne Trackingnummer bleibt die Bestellnummer als Anker — die spaetere
     # Versandmail rastet ueber dieselbe ID darauf ein.
-    for tracking_number in tracking_numbers or [None]:
+    for tracking_number in numbers or [None]:
         try:
             shipment_id = build_shipment_id(
                 rules.carrier_id,

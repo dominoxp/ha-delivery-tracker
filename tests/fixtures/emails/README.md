@@ -72,3 +72,49 @@ Fehltreffer ist.
 | `zugestellt.eml`            | zugestellt mit Uhrzeit, ohne Liefertermin                       |
 | `logistics_zeitfenster.eml` | **nachgebaut**: der `TBA`-Pfad, der in den echten Mails fehlt   |
 | `werbung.eml`               | „Angebote des Tages" — darf nirgends ankommen                   |
+
+## `dpd/`, `gls/`, `hermes/`, `ups/` — die uebrigen Zusteller (Step 1.4)
+
+Echte Vorlagen gab es nur fuer DPD (`unterwegs.eml`) und Hermes
+(`paketshop.eml`, `unterwegs_zum_paketshop.eml`); alles andere ist nachgebaut.
+DPD, GLS und Hermes kennen kein Pruefverfahren, ihre Nummern sind deshalb frei
+erfunden. Die UPS-Nummern haben eine stimmende Pruefziffer.
+
+| Datei                              | Wofuer sie da ist                                                 |
+| ---------------------------------- | ----------------------------------------------------------------- |
+| `dpd/unterwegs.eml`                | **echt**: Nummer im Betreff ohne Ankuendigung und im Link; `zip=` |
+| `dpd/zustellzeitfenster.eml`       | Nummer in Vierergruppen, Fenster fuer heute                        |
+| `dpd/zustellung.eml`               | zugestellt mit eigenem Zeitpunkt                                   |
+| `dpd/zustellversuch.eml`           | nicht angetroffen, naechster Versuch als Termin                    |
+| `dpd/nachbar.eml`                  | beim Nachbarn zugestellt — trotz „nicht angetroffen" im Text       |
+| `dpd/paketshop.eml`                | Abholort und Abholcode getrennt                                    |
+| `dpd/im_auftrag_des_shops.eml`     | Shop als Absender, DPD nur in Link und Text                        |
+| `gls/sendungsankuendigung.eml`     | Paketnummer und Track ID in einer Mail — eine Sendung             |
+| `gls/zustellzeitfenster.eml`       | HTML; Nummer nur im Verfolgen-Link (`?match=`)                     |
+| `gls/zustellung.eml`               | zugestellt mit eigenem Zeitpunkt                                   |
+| `gls/zustellversuch.eml`           | nur die Track ID                                                   |
+| `gls/nachbar.eml`                  | beim Nachbarn abgegeben                                            |
+| `gls/paketshop.eml`                | abholbereit im PaketShop                                           |
+| `hermes/sendungsankuendigung.eml`  | Nummer nur im Link-Fragment (`…#H100…`), wie in den echten Mails   |
+| `hermes/unterwegs_zum_paketshop.eml` | **echt**: „liegt in Kuerze zur Abholung bereit" ist noch unterwegs |
+| `hermes/paketshop.eml`             | **echt**: Abholort als Block unter „PaketShop", Haendler im Satz   |
+| `hermes/zustellzeitfenster.eml`    | 14-stellige Nummer, Fenster fuer heute                             |
+| `hermes/zustellung.eml`            | 16-stellige Nummer, zugestellt mit Zeitpunkt                       |
+| `hermes/zustellversuch.eml`        | nicht angetroffen, naechster Versuch als Termin                    |
+| `hermes/nachbar.eml`               | an den Nachbarn uebergeben                                         |
+| `ups/versandetikett.eml`           | Etikett erstellt; „der Versender hat …" ist kein Absendername      |
+| `ups/zustellzeitfenster.eml`       | Nummer in Gruppen (`1Z 0E1 234 …`), Fenster fuer heute             |
+| `ups/zugestellt_englisch.eml`      | englisch; US-Datum wird nicht geraten                              |
+| `ups/unterwegs_englisch.eml`       | englisch, unterwegs                                                |
+| `ups/zustellversuch.eml`           | nicht angetroffen, naechster Versuch als Termin                    |
+| `ups/nachbar.eml`                  | beim Nachbarn abgegeben                                            |
+| `ups/access_point.eml`             | „an den Access Point zugestellt" ist abholbereit, nicht zugestellt |
+
+## `generic/` — der Fallback
+
+| Datei                       | Wofuer sie da ist                                                        |
+| --------------------------- | ------------------------------------------------------------------------ |
+| `unbekannter_zusteller.eml` | Shop-Mail mit gueltiger S10-Nummer eines Zustellers ohne Plugin          |
+| `fremd_beansprucht.eml`     | DHL meldet sich wegen „Ihr Paket", liefert nichts — `generic` uebernimmt  |
+| `rechnung.eml`              | gueltige Pruefziffern hinter Rechnungs-/Kundennummer — darf nichts liefern |
+| `shop_ohne_nummer.eml`      | **echt**: Statusmail eines Shops ohne Trackingnummer — liefert nichts     |

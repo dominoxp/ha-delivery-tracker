@@ -1,6 +1,6 @@
 """Ein Verzeichnis `.eml` durch die echte Pipeline schicken und zeigen, was herauskommt.
 
-    docker run --rm -v "%CD%:/app" -w /app ha-delivery-tracker-test \
+    docker run --rm -v "%CD%:/app" -w /app -e PYTHONPATH=/app ha-delivery-tracker-test \
         python tools/inspect_mails.py tools/emails
 
 Braucht Home Assistant und laeuft deshalb im Test-Image. Das Skript aendert
@@ -44,18 +44,21 @@ def main(argv: list[str]) -> int:
 
     for path in sorted(source.rglob("*.eml")):
         mail = parse_mail(path.read_bytes())
-        matched = registry.match(mail)
         print("=" * 100)
         print(f"{path.name}\n  Von: {mail.from_address}\n  Betreff: {mail.subject}")
 
-        if matched is None:
+        candidates = registry.candidates(mail)
+        if not candidates:
             print("  -> KEIN PLUGIN")
             continue
 
-        plugin, score = matched
-        shipments = plugin.parse_all(mail)
-        print(f"  -> {plugin.carrier_id} (Bewertung {score}), {len(shipments)} Sendung(en)")
-        for shipment in shipments:
+        ranking = ", ".join(f"{plugin.carrier_id} {score}" for plugin, score in candidates)
+        resolution = registry.resolve(mail)
+        plugin = resolution.plugin
+        assert plugin is not None
+        print(f"  Kandidaten: {ranking}")
+        print(f"  -> {plugin.carrier_id}, {len(resolution.shipments)} Sendung(en)")
+        for shipment in resolution.shipments:
             print(f"     id: {shipment.id}")
             for name in FIELDS:
                 value = getattr(shipment, name)

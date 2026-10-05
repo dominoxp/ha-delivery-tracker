@@ -51,6 +51,12 @@ POSITIVE_CONTEXT: Final[frozenset[str]] = frozenset(
         "tracking-id",
         "trackingid",
         "tracking code",
+        # GLS nennt seine kurze Kennung „Track ID".
+        "track id",
+        "track-id",
+        "trackid",
+        "parcel number",
+        "paketscheinnummer",
         "verfolgungsnummer",
         "frachtbriefnummer",
         "identcode",
@@ -133,6 +139,9 @@ TRACKING_PARAMS: Final[frozenset[str]] = frozenset(
         "trackingnummer",
         "lettercode",
         "hwb",
+        # DPD (`tracking.dpd.de/parcelstatus?query=`), GLS (`?match=`), UPS (`?tracknum=`).
+        "query",
+        "match",
     }
 )
 
@@ -146,6 +155,9 @@ _ALNUM: Final = re.compile(r"^[0-9A-Z]+$")
 
 # UPS: `1Z` + 16 Zeichen, das letzte davon die Pruefziffer.
 _UPS: Final = re.compile(r"^1Z[0-9A-Z]{16}$")
+
+# UPU S10: `RR` + 8 Ziffern + Pruefziffer + Laenderkuerzel.
+_S10: Final = re.compile(r"^[A-Z]{2}\d{9}[A-Z]{2}$")
 
 
 class ChecksumResult(StrEnum):
@@ -173,6 +185,8 @@ class TrackingChecksum(StrEnum):
     """Leitcode (14 Stellen) und Identcode (12 Stellen), Gewichtung 4/9."""
     GS1 = "gs1"
     """NVE/SSCC (18 oder 20 Stellen), Gewichtung 3/1 von rechts."""
+    UPU_S10 = "upu_s10"
+    """Internationale Postsendungen (`RR123456785DE`), Gewichtung 8-6-4-2-3-5-9-7."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,11 +207,17 @@ class TrackingCandidate:
         """Ob die Fundstelle als Trackingnummer durchgeht.
 
         Eine falsche Pruefziffer schliesst immer aus. Ein ausschliessendes
-        Kontextwort ebenfalls — es sei denn, die Pruefziffer belegt das Gegenteil.
+        Kontextwort ebenfalls — es sei denn, die Pruefziffer belegt das
+        Gegenteil. Das gilt aber nur fuer Nummern mit Buchstaben (`1Z…`,
+        `RR…DE`): Bei einer reinen Ziffernfolge stimmt eine einstellige
+        Pruefziffer in jedem zehnten Fall zufaellig, und „Kundennummer:
+        12345678901234567890" waere sonst eine Sendung.
         """
         if self.checksum is ChecksumResult.INVALID:
             return False
-        return self.context >= 0 or self.checksum is ChecksumResult.VALID
+        if self.context >= 0:
+            return True
+        return self.checksum is ChecksumResult.VALID and not self.number.isdigit()
 
 
 def normalize_tracking_number(value: str) -> str:
@@ -251,6 +271,19 @@ def gs1_check_digit(payload: str) -> int:
     return (10 - total % 10) % 10
 
 
+_S10_WEIGHTS: Final[tuple[int, ...]] = (8, 6, 4, 2, 3, 5, 9, 7)
+
+
+def upu_s10_check_digit(payload: str) -> int:
+    """Pruefziffer einer S10-Nummer aus ihren acht Ziffern (UPU-Norm S10).
+
+    Der Rest modulo 11 wird von 11 abgezogen; 10 wird zu 0, 11 zu 5.
+    """
+    total = sum(int(char) * weight for char, weight in zip(payload, _S10_WEIGHTS, strict=True))
+    digit = 11 - total % 11
+    return {10: 0, 11: 5}.get(digit, digit)
+
+
 def _check(payload: str, digit: str, expected: int) -> ChecksumResult:
     """Eine berechnete Pruefziffer mit der gefundenen vergleichen."""
     if not payload or not digit.isdigit():
@@ -280,10 +313,18 @@ def _gs1_result(number: str) -> ChecksumResult:
     return _check(number[:-1], number[-1], gs1_check_digit(number[:-1]))
 
 
+def _upu_s10_result(number: str) -> ChecksumResult:
+    """S10-Nummer pruefen: zwei Buchstaben, acht Ziffern, Pruefziffer, Laenderkuerzel."""
+    if not _S10.match(number):
+        return ChecksumResult.UNKNOWN
+    return _check(number[2:10], number[10], upu_s10_check_digit(number[2:10]))
+
+
 _CHECKS: Final[dict[TrackingChecksum, Callable[[str], ChecksumResult]]] = {
     TrackingChecksum.UPS: _ups_result,
     TrackingChecksum.DEUTSCHE_POST: _deutsche_post_result,
     TrackingChecksum.GS1: _gs1_result,
+    TrackingChecksum.UPU_S10: _upu_s10_result,
 }
 
 

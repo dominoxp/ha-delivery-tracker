@@ -1,0 +1,18 @@
+From: UPS <pkginfo@ups.com>
+To: max.mustermann@example.org
+Subject: UPS Update: Your package is on the way
+Date: Wed, 29 Jul 2026 09:00:00 +0200
+Message-ID: <ups-on-the-way@ups.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+Hello Max Mustermann,
+
+Your package is on the way.
+
+Tracking Number: 1Z0E12345678901262
+Scheduled Delivery: Thursday, 07/30/2026
+Shipped From: Kaffeerösterei Nord
+
+United Parcel Service of America, Inc.

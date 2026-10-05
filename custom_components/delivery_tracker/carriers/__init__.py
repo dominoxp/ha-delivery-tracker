@@ -15,6 +15,7 @@ import importlib
 import importlib.util
 import logging
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import Final
@@ -31,6 +32,7 @@ __all__ = [
     "PLUGIN_ATTR",
     "CarrierPlugin",
     "CarrierRegistry",
+    "Resolution",
     "RulesCarrier",
     "RulesError",
     "async_get_registry",
@@ -50,6 +52,20 @@ _REGISTRY_KEY: Final = f"{DOMAIN}.carrier_registry"
 _REGISTRY_LOCK_KEY: Final = f"{DOMAIN}.carrier_registry_lock"
 
 _PACKAGE_PATH: Final = Path(__file__).parent
+
+
+@dataclass(frozen=True, slots=True)
+class Resolution:
+    """Ergebnis der Zuordnung einer Mail."""
+
+    shipments: list[Shipment]
+    plugin: CarrierPlugin | None = None
+    """Das Plugin, das geliefert hat — ohne Sendung das bestbewertete."""
+    score: int = 0
+    candidates: int = 0
+    """Wie viele Plugins sich zustaendig gefuehlt haben; 0 heisst „fremde Mail"."""
+    failed: bool = False
+    """Mindestens ein Kandidat ist gescheitert, und keiner hat geliefert."""
 
 
 class CarrierRegistry:
@@ -86,14 +102,13 @@ class CarrierRegistry:
         """Ein Plugin ueber seine Carrier-ID holen."""
         return self._plugins.get(carrier_id)
 
-    def match(self, mail: MailMessage) -> tuple[CarrierPlugin, int] | None:
-        """Das am besten passende Plugin samt Bewertung ermitteln.
+    def candidates(self, mail: MailMessage) -> list[tuple[CarrierPlugin, int]]:
+        """Alle Plugins, die sich fuer die Mail zustaendig fuehlen, bestes zuerst.
 
         Bei gleicher Bewertung entscheidet die Plugin-Prioritaet, danach die
-        alphabetisch erste Carrier-ID — die Zuordnung ist damit reproduzierbar.
+        alphabetisch erste Carrier-ID — die Reihenfolge ist damit reproduzierbar.
         """
-        best: tuple[CarrierPlugin, int] | None = None
-        best_key: tuple[int, int] | None = None
+        scored: list[tuple[CarrierPlugin, int]] = []
         for plugin in self.plugins:
             try:
                 score = plugin.matches(mail)
@@ -102,39 +117,64 @@ class CarrierRegistry:
                     "Carrier-Plugin '%s' ist bei matches() gescheitert", plugin.carrier_id
                 )
                 continue
-            if score <= 0:
+            if score > 0:
+                scored.append((plugin, score))
+        return sorted(scored, key=lambda item: (-item[1], -item[0].priority, item[0].carrier_id))
+
+    def match(self, mail: MailMessage) -> tuple[CarrierPlugin, int] | None:
+        """Das am besten passende Plugin samt Bewertung ermitteln."""
+        found = self.candidates(mail)
+        return found[0] if found else None
+
+    def resolve(self, mail: MailMessage) -> Resolution:
+        """Die Mail auswerten — liefert das beste Plugin nichts, das naechstbeste.
+
+        Die Bewertung sagt nur, wer sich zustaendig *fuehlt*. Ein weiter
+        Betreff wie „Ihr Paket" bringt einem Plugin Punkte fuer eine fremde
+        Mail, aus der es dann keine Sendung zieht. Wuerde die Registry dort
+        aufhoeren, kaeme der generische Fallback mit seiner absichtlich
+        niedrigsten Bewertung nie zum Zug. Umgekehrt verdraengt er so nie ein
+        spezifisches Plugin: Er wird erst gefragt, wenn alle davor leer bleiben.
+        """
+        found = self.candidates(mail)
+        failed = False
+        for plugin, score in found:
+            try:
+                shipments = plugin.parse_all(mail)
+            except Exception:
+                _LOGGER.exception(
+                    "Carrier-Plugin '%s' ist bei parse() gescheitert", plugin.carrier_id
+                )
+                failed = True
                 continue
-            key = (score, plugin.priority)
-            if best_key is None or key > best_key:
-                best, best_key = (plugin, score), key
-        return best
+            if shipments:
+                _LOGGER.debug(
+                    "Mail %s -> Plugin '%s' (Bewertung %d), Sendungen: %s",
+                    mail.message_id,
+                    plugin.carrier_id,
+                    score,
+                    ", ".join(shipment.id for shipment in shipments),
+                )
+                return Resolution(shipments, plugin, score, len(found))
+            _LOGGER.debug(
+                "Mail %s: Plugin '%s' (Bewertung %d) liefert keine Sendung",
+                mail.message_id,
+                plugin.carrier_id,
+                score,
+            )
+
+        if not found:
+            _LOGGER.debug("Keine Zuordnung fuer Mail %s", mail.message_id)
+            return Resolution([])
+        plugin, score = found[0]
+        return Resolution([], plugin, score, len(found), failed=failed)
 
     def parse_all(self, mail: MailMessage) -> list[Shipment]:
-        """Die Mail vom bestbewerteten Plugin auswerten lassen.
+        """Alle Sendungen der Mail; leer heisst keine Zuordnung oder keine Sendung.
 
-        Eine leere Liste heisst: keine Zuordnung oder keine verwertbare Sendung.
-        Der Aufrufer (die Pipeline) unterscheidet beides ueber `match`.
+        Der Aufrufer (die Pipeline) unterscheidet beides ueber `resolve`.
         """
-        matched = self.match(mail)
-        if matched is None:
-            _LOGGER.debug("Keine Zuordnung fuer Mail %s", mail.message_id)
-            return []
-
-        plugin, score = matched
-        try:
-            shipments = plugin.parse_all(mail)
-        except Exception:
-            _LOGGER.exception("Carrier-Plugin '%s' ist bei parse() gescheitert", plugin.carrier_id)
-            return []
-
-        _LOGGER.debug(
-            "Mail %s -> Plugin '%s' (Bewertung %d), Sendungen: %s",
-            mail.message_id,
-            plugin.carrier_id,
-            score,
-            ", ".join(shipment.id for shipment in shipments) or "keine",
-        )
-        return shipments
+        return self.resolve(mail).shipments
 
     def parse(self, mail: MailMessage) -> Shipment | None:
         """Die erste Sendung der Mail — fuer Aufrufer, die nur eine erwarten."""

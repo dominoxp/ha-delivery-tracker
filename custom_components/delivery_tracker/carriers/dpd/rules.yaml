@@ -1,0 +1,105 @@
+# Regelsatz DPD.
+#
+# DPD verschickt seine Benachrichtigungen haeufig im Auftrag des Haendlers —
+# die Absender-Domain ist dann die des Shops. Die Erkennung stuetzt sich
+# deshalb auf Tracking-Link, Firmenzeile und Nummernformat; die Domain ist nur
+# ein Zusatzsignal. Aufbau und Bedeutung aller Felder stehen in `carriers/example/`.
+
+carrier: dpd
+name: DPD
+
+match:
+  from_domains:
+    - dpd.de
+    - dpd.com
+    - dpdgroup.com
+  subject_patterns:
+    - "\\bdpd\\b"
+    # „Verfolgen Sie Ihr Paket 01668241297643." — die echte myDPD-Mail nennt
+    # ihren Absender im Betreff nicht.
+    - "paket\\s+\\d{14}\\b"
+  body_patterns:
+    - "dpd deutschland gmbh"
+    - "ihr dpd[ -]team"
+    - "(?:my|tracking)\\.dpd\\.de"
+    - "dpd pickup"
+  newsletter_patterns:
+    - "gewinnspiel"
+    - "jetzt (?:entdecken|shoppen|sichern)"
+    - "\\d+\\s*%\\s*rabatt"
+
+tracking:
+  # Die Paketnummer hat 14 Stellen und wird gern in Vierergruppen gesetzt. Eine
+  # Pruefziffer steht nur auf dem Etikett, nicht in der Nummer — deshalb gilt
+  # nur, was angekuendigt ist oder im Verfolgen-Link steht (`parcelno`, `query`).
+  patterns:
+    - "\\b(\\d{14})\\b"
+    - "\\b(\\d{4} \\d{4} \\d{4} \\d{2})\\b"
+  url: "https://tracking.dpd.de/status/de_DE/parcel/{tracking_number}"
+  checksum: []
+  require_context: true
+
+# Abholbereit steht vor dem gescheiterten Zustellversuch: „Wir haben Sie nicht
+# angetroffen, Ihr Paket liegt im Paketshop bereit" meint fuer den Empfaenger
+# vor allem das Zweite.
+status_map:
+  - status: delivered
+    patterns:
+      - "wurde (?:heute |erfolgreich )?(?:an sie )?zugestellt"
+      - "ihr paket ist da"
+      - "(?:bei|an) (?:ihrem|ihren|einem|einen) nachbarn[^\\n]{0,40}(?:zugestellt|abgegeben|[uü]bergeben)"
+  - status: ready_for_pickup
+    patterns:
+      - "liegt[^\\n]{0,60}(?:zur abholung|abholbereit)"
+      - "k[oö]nnen sie[^\\n]{0,60}abholen"
+      - "(?:im|in einem|in den) (?:dpd )?(?:pickup )?paketshop[^\\n]{0,40}(?:abgegeben|zugestellt|hinterlegt)"
+  - status: delivery_failed
+    patterns:
+      - "nicht angetroffen"
+      - "konnten wir[^\\n]{0,40}nicht (?:zustellen|antreffen)"
+      - "zustellung[^\\n]{0,20}nicht m[oö]glich"
+  - status: returned
+    patterns:
+      - "an den absender zur[uü]ck"
+  - status: delayed
+    patterns:
+      - "verz[oö]gert"
+      - "versp[aä]tet"
+  - status: out_for_delivery
+    patterns:
+      - "kommt heute"
+      - "wird heute[^\\n]{0,40}zugestellt"
+      - "ist in zustellung"
+  - status: label_created
+    patterns:
+      - "paketdaten[^\\n]{0,40}(?:[uü]bermittelt|erhalten)"
+      - "wurde (?:uns )?angek(?:ue|[uü])ndigt"
+  - status: in_transit
+    patterns:
+      - "(?:ist )?auf dem weg zu ihnen"
+      - "ist unterwegs"
+
+dates:
+  eta_patterns:
+    - "zeitfenster:?\\s*(?P<value>[^\\n]{3,90})"
+    - "kommt[^\\S\\n]+(?P<value>(?:heute|morgen|[uü]bermorgen|am\\s)[^\\n]{0,80})"
+    - "voraussichtlich(?:e[rsn]?)?\\s*(?:zustellung|lieferung|zustelltag)?:?[^\\S\\n]*(?P<value>[^\\n]{3,90})"
+    - "zustellung\\s*(?:am|:)\\s*(?P<value>[^\\n]{3,90})"
+    - "n[aä]chste[rn]?\\s+zustellversuch[^\\S\\n]*(?:am|:)?[^\\S\\n]*(?P<value>[^\\n]{3,60})"
+  delivered_patterns:
+    - "zugestellt[^\\S\\n]*(?:am|um)[^\\S\\n]*(?P<value>[^\\n]{3,60})"
+
+fields:
+  # Der Doppelpunkt ist Pflicht — sonst wird aus „der Versender hat …" ein Name.
+  sender:
+    - "(?:absender|versender):\\s*(?P<value>[^\\n]{2,60})"
+    - "im auftrag von\\s*(?P<value>[^\\n]{2,60})"
+  order_number:
+    - "bestellnummer:?\\s*(?P<value>[A-Z0-9][A-Z0-9-]{3,29})"
+  pickup_location:
+    - "abholort:?\\s*(?P<value>[^\\n]{2,80})"
+    - "nachbarn?[^\\n]{0,20}:\\s*(?P<value>[^\\n]{2,80})"
+  pickup_code:
+    - "abhol-?code:?\\s*(?P<value>[A-Z0-9]{4,12})"
+  destination_raw:
+    - "(?:liefer|zustell|empf[aä]nger)adresse:?\\s*(?P<value>[^\\n]{5,120})"

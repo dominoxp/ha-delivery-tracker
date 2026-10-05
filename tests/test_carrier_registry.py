@@ -230,6 +230,71 @@ def test_fehler_im_plugin_wird_isoliert(tmp_path: Path, caplog: pytest.LogCaptur
     assert "boom" in caplog.text
 
 
+def test_leeres_bestes_plugin_faellt_auf_das_naechste_zurueck(tmp_path: Path):
+    """Liefert der Favorit nichts, kommt der Naechste dran — auch ein Fallback mit -100."""
+    _write_plugin(
+        tmp_path,
+        "laut",
+        'carrier: laut\nname: Laut\nmatch:\n  subject_patterns: ["ihre sendung"]\n',
+    )
+    _write_plugin(
+        tmp_path,
+        "leise",
+        "carrier: leise\nname: Leise\nscore_bonus: -100\npriority: -100\n"
+        'match:\n  body_patterns: ["sendungsnummer"]\n'
+        'tracking:\n  patterns: ["\\\\b(AC\\\\d{8})\\\\b"]\n',
+    )
+    registry = CarrierRegistry(discover_plugins(tmp_path))
+
+    matched = registry.match(_mail())
+    resolution = registry.resolve(_mail())
+
+    assert matched is not None
+    assert matched[0].carrier_id == "laut"
+    assert resolution.plugin is not None
+    assert resolution.plugin.carrier_id == "leise"
+    assert [shipment.carrier for shipment in resolution.shipments] == ["leise"]
+    assert resolution.candidates == 2
+
+
+def test_fallback_verdraengt_kein_liefernes_plugin(tmp_path: Path):
+    """Liefert der Favorit, wird der Fallback gar nicht erst gefragt."""
+    _write_plugin(
+        tmp_path,
+        "acme",
+        'carrier: acme\nname: ACME\nmatch:\n  subject_patterns: ["ihre sendung"]\n'
+        'tracking:\n  patterns: ["\\\\b(AC\\\\d{8})\\\\b"]\n',
+    )
+    _write_plugin(
+        tmp_path,
+        "fallback",
+        "carrier: fallback\nname: Fallback\nscore_bonus: -100\npriority: -100\n"
+        'match:\n  body_patterns: ["sendungsnummer"]\n'
+        'tracking:\n  patterns: ["\\\\b(AC\\\\d{8})\\\\b"]\n',
+    )
+
+    resolution = CarrierRegistry(discover_plugins(tmp_path)).resolve(_mail())
+
+    assert resolution.plugin is not None
+    assert resolution.plugin.carrier_id == "acme"
+
+
+def test_ohne_lieferung_meldet_resolve_das_beste_plugin(tmp_path: Path):
+    """Keine Sendung, aber Kandidaten — die Pipeline zaehlt das als „ohne Sendung"."""
+    _write_plugin(
+        tmp_path,
+        "acme",
+        'carrier: acme\nname: ACME\nmatch:\n  subject_patterns: ["ihre sendung"]\n',
+    )
+
+    resolution = CarrierRegistry(discover_plugins(tmp_path)).resolve(_mail())
+
+    assert resolution.shipments == []
+    assert resolution.plugin is not None
+    assert resolution.plugin.carrier_id == "acme"
+    assert resolution.failed is False
+
+
 async def test_registry_wird_nur_einmal_ermittelt(hass: HomeAssistant):
     """Mehrfaches Laden der Integration darf die Discovery nicht wiederholen."""
     first = await async_get_registry(hass)

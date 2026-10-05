@@ -4,8 +4,12 @@ Sie klammert die drei Schritte zusammen, die zwischen Postfach und Datenmodell
 liegen, und ist damit der `MailHandler`, den die IMAP-Quelle aus Step 1.1 erwartet:
 
 ```
-Rohbytes ──▶ parse_mail ──▶ Registry.match ──▶ Plugin.parse_all ──▶ [Shipment]
+Rohbytes ──▶ parse_mail ──▶ Registry.resolve ──▶ Plugin.parse_all ──▶ [Shipment]
 ```
+
+`resolve` fragt die zustaendigen Plugins in der Reihenfolge ihrer Bewertung,
+bis eines eine Sendung liefert — der generische Fallback kommt also auch dann
+noch zum Zug, wenn sich vorher ein spezifisches Plugin vergeblich gemeldet hat.
 
 Nichts davon darf werfen. Eine Mail, die niemand versteht, ist Normalbetrieb —
 Postfaecher enthalten weit mehr Werbung als Paketmeldungen. Verworfene Mails
@@ -99,8 +103,9 @@ class MailPipeline:
 
     def process_mail(self, mail: MailMessage) -> list[Shipment]:
         """Eine bereits aufbereitete Mail zuordnen und auswerten."""
-        matched = self._registry.match(mail)
-        if matched is None:
+        resolution = self._registry.resolve(mail)
+        plugin, shipments = resolution.plugin, resolution.shipments
+        if plugin is None:
             self._stats.unmatched += 1
             _LOGGER.debug(
                 "Mail %s von %s verworfen: kein Zusteller zustaendig",
@@ -109,15 +114,11 @@ class MailPipeline:
             )
             return []
 
-        plugin, _ = matched
-        try:
-            shipments = plugin.parse_all(mail)
-        except Exception:
-            self._stats.failed += 1
-            _LOGGER.exception("Carrier-Plugin '%s' ist bei parse() gescheitert", plugin.carrier_id)
-            return []
-
         if not shipments:
+            if resolution.failed:
+                # Geloggt hat bereits die Registry, mit Traceback.
+                self._stats.failed += 1
+                return []
             self._stats.without_shipment += 1
             _LOGGER.debug(
                 "Mail %s gehoert zu '%s', enthaelt aber keine Sendung",

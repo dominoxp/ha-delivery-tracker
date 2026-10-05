@@ -124,6 +124,29 @@ def test_fehler_im_plugin_wird_gezaehlt_und_isoliert(caplog: pytest.LogCaptureFi
     assert "boom" in caplog.text
 
 
+def test_scheiternder_favorit_haelt_den_naechsten_nicht_auf(email_fixture: Loader):
+    """Wirft das bestbewertete Plugin, darf das naechste die Mail trotzdem auswerten."""
+
+    class Boom(CarrierPlugin):
+        def __init__(self) -> None:
+            super().__init__("boom", "Boom")
+
+        def matches(self, mail: MailMessage) -> int:
+            return 1000
+
+        def parse(self, mail: MailMessage) -> Shipment | None:
+            raise RuntimeError("kaputt")
+
+    pipeline = MailPipeline(CarrierRegistry([Boom(), EXAMPLE_PLUGIN]))
+
+    shipments = pipeline.process(email_fixture("utf8_plain.eml"))
+
+    assert [shipment.carrier for shipment in shipments] == ["example"]
+    assert pipeline.stats.matched == 1
+    assert pipeline.stats.failed == 0
+    assert pipeline.stats.by_carrier == {"example": 1}
+
+
 def test_handle_erfuellt_die_mailhandler_signatur(pipeline: MailPipeline, email_fixture: Loader):
     """Die Pipeline ist der `MailHandler`, den die IMAP-Quelle aus 1.1 erwartet."""
     raw_mail = RawMail(uid=42, raw=email_fixture("utf8_plain.eml"), folder="INBOX")

@@ -1,0 +1,19 @@
+From: Hermes <noreply@paketankuendigung.myhermes.de>
+To: max.mustermann@example.org
+Subject: =?UTF-8?Q?Ihre_Hermes_Sendung_wurde_angek=C3=BCndigt?=
+Date: Tue, 28 Jul 2026 19:12:00 +0200
+Message-ID: <hermes-ankuendigung@myhermes.de>
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+<html>
+<body>
+<p>Hallo Max Mustermann,</p>
+<p>Kaffeerösterei Nord hat Ihre Sendung bei uns angekündigt.</p>
+<p>Voraussichtliche Zustellung: Freitag, 31.07.2026</p>
+<p><a href="https://www.myhermes.de/empfangen/sendungsverfolgung/sendungsinformation/?wt_cc1=button_sendungsnummer&amp;wt_mc=re_pa26#H1001234567890123451"><img src="https://www.myhermes.de/img/button_verfolgen.png" alt=""></a></p>
+<p>Ihr Hermes Team</p>
+<p>Hermes Germany GmbH</p>
+</body>
+</html>

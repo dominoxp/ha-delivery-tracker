@@ -62,6 +62,39 @@ Zwei Wege, einer davon ist zu wählen:
 Als Testmaterial liegen eine echte DPD- und eine echte Shop-Mail vor (lokal unter
 `tools/emails/`, nicht im Repository — sie müssen vor der Verwendung anonymisiert werden).
 
+## Nachtrag aus der Umsetzung (Oktober 2026)
+
+- **Gewählt: Rückfall auf das nächstbeste Plugin.** `CarrierRegistry.resolve` fragt die
+  Kandidaten in der Reihenfolge ihrer Bewertung, bis einer eine Sendung liefert; die Pipeline
+  nutzt dieselbe Auflösung. `generic` verdrängt damit nie ein spezifisches Plugin — es wird
+  erst gefragt, wenn alle davor leer bleiben — und kommt trotzdem zum Zug, wenn sich vorher ein
+  Plugin vergeblich gemeldet hat. Wirft ein Kandidat, kommt ebenfalls der nächste dran.
+- **Die echte Shop-Mail liefert bewusst nichts.** Sie trägt nur eine Bestellnummer, keine
+  Trackingnummer. Eine Bestellnummer lässt sich über keine API verfolgen, und würde `generic`
+  sie annehmen, wäre jede Statusmail jedes Shops eine Sendung. `generic` liefert deshalb nur
+  Trackingnummern.
+- **`generic` nimmt nur Nummern mit stimmender Prüfziffer an** (UPS, NVE, neu: UPU S10 für
+  internationale Postsendungen) und nie hinter einem ausschließenden Kontextwort. Reine
+  Ziffernfolgen brauchen zusätzlich eine Ankündigung oder einen Tracking-Parameter im Link.
+  Die 12- und 14-stelligen Formate der Deutschen Post sind absichtlich nicht dabei: DPD, GLS
+  und Hermes nutzen dieselben Längen ohne Prüfziffer, und jede zehnte ihrer Nummern ginge
+  zufällig als DHL durch.
+- **Verschärft in `tracking.py`:** Eine stimmende Prüfziffer hebt ein ausschließendes
+  Kontextwort nur noch bei Nummern mit Buchstaben auf (`1Z…`, `RR…DE`). Bei reinen
+  Ziffernfolgen stimmt eine einstellige Prüfziffer in jedem zehnten Fall zufällig — sonst wäre
+  „Kundennummer: 1234…7890" für das DHL-Plugin eine Sendung.
+- **GLS** führt jedes Paket unter Paketnummer und Track ID. Nennt eine Mail beide, gewinnt die
+  Paketnummer; das Plugin macht sonst zwei Sendungen daraus. Ob alle GLS-Mails die Paketnummer
+  nennen, ist ungeprüft — es lag keine echte GLS-Mail vor.
+- **Hermes** (14 echte Mails von Februar/März 2026, lokal unter `tools/emails/`): Die Nummer
+  steht im Fragment des Verfolgen-Links (`…#H1022…`) und zusätzlich sichtbar. „Liegt in Kürze
+  zur Abholung bereit" ist noch `in_transit`; der Abholort steht als mehrzeiliger Block unter
+  „PaketShop".
+- **UPS** englisch: Status-Muster zweisprachig, Termine nur deutsch — ein US-Datum
+  („07/30/2026") bleibt leer statt falsch gelesen.
+- `tools/inspect_mails.py` zeigt jetzt alle Kandidaten samt Bewertung und wertet über
+  `resolve` aus, also mit Rückfall.
+
 ## Akzeptanzkriterien
 
 - Je Zusteller und Mailtyp existiert eine Fixture mit Test auf die erwarteten Felder.
@@ -76,9 +109,9 @@ Als Testmaterial liegen eine echte DPD- und eine echte Shop-Mail vor (lokal unte
 
 ## Checkliste
 
-- [ ] carriers/dpd/, gls/, hermes/, ups/ mit rules.yaml und Logik
-- [ ] carriers/generic/ mit Nummernformat-Erkennung und niedrigster Priorität
-- [ ] Bewertungslogik: generic verdrängt nie ein spezifisches Plugin
-- [ ] Fixtures je Zusteller und Mailtyp
-- [ ] Negativtests gegen Geistersendungen
-- [ ] Tests grün
+- [x] carriers/dpd/, gls/, hermes/, ups/ mit rules.yaml und Logik
+- [x] carriers/generic/ mit Nummernformat-Erkennung und niedrigster Priorität
+- [x] Bewertungslogik: generic verdrängt nie ein spezifisches Plugin
+- [x] Fixtures je Zusteller und Mailtyp
+- [x] Negativtests gegen Geistersendungen
+- [x] Tests grün

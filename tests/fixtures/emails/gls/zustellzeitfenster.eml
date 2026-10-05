@@ -1,0 +1,21 @@
+From: GLS Germany <noreply@gls-group.eu>
+To: max.mustermann@example.org
+Subject: Ihr GLS Paket kommt heute
+Date: Thu, 30 Jul 2026 07:30:00 +0200
+Message-ID: <gls-zeitfenster@gls-group.eu>
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+<html>
+<body>
+<p>Guten Tag Max Mustermann,</p>
+<p>Ihr Paket kommt heute.</p>
+<table>
+<tr><td>Zeitfenster:</td><td>heute zwischen 13:00 und 15:00 Uhr</td></tr>
+<tr><td>Absender:</td><td>Kaffeerösterei Nord</td></tr>
+</table>
+<p><a href="https://gls-group.com/DE/de/paketverfolgung?match=50123456790">Paket verfolgen</a></p>
+<p>Ihr GLS Team<br>GLS Germany GmbH &amp; Co. OHG</p>
+</body>
+</html>

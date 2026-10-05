@@ -1,0 +1,105 @@
+# Regelsatz GLS.
+#
+# Wie DPD versendet GLS seine Mails oft im Auftrag des Haendlers; erkannt wird
+# deshalb vor allem an Firmenzeile, Verfolgen-Link und Track ID. Aufbau und
+# Bedeutung aller Felder stehen in `carriers/example/`.
+
+carrier: gls
+name: GLS
+
+match:
+  from_domains:
+    - gls-group.eu
+    - gls-group.com
+    - gls-group.net
+    - gls-pakete.de
+    - gls-germany.com
+  subject_patterns:
+    - "\\bgls\\b"
+  body_patterns:
+    - "gls germany"
+    - "general logistics systems"
+    - "gls[- ](?:group|pakete)\\.(?:eu|com|de)"
+    - "gls parcelshop"
+    - "\\btrack[- ]?id\\b"
+  newsletter_patterns:
+    - "gewinnspiel"
+    - "jetzt (?:entdecken|shoppen|sichern)"
+    - "\\d+\\s*%\\s*rabatt"
+
+tracking:
+  # Zwei Kennungen: die Paketnummer (11 oder 12 Ziffern) und die kurze Track ID
+  # (8 Zeichen). Fuer die Paketnummer ist kein Pruefverfahren hinterlegt, also
+  # zaehlt sie nur mit Ankuendigung. Die Track ID sieht aus wie jedes andere
+  # Wort mit acht Buchstaben; im Fliesstext gilt sie deshalb nur direkt hinter
+  # ihrer Beschriftung, im Link nur als vollstaendiger Parameterwert (`^…$`
+  # trifft im Fliesstext nie).
+  patterns:
+    - "track[- ]?id:?\\s*(?P<value>(?=[A-Z]*\\d)[A-Z0-9]{8})\\b"
+    - "\\b(\\d{11,12})\\b"
+    - "^(?P<value>(?=[A-Z]*\\d)[A-Z0-9]{8})$"
+  url: "https://gls-group.com/DE/de/paketverfolgung?match={tracking_number}"
+  checksum: []
+  require_context: true
+
+status_map:
+  - status: delivered
+    patterns:
+      - "wurde (?:heute |erfolgreich )?(?:an sie )?zugestellt"
+      - "(?:bei|an) (?:ihrem|ihren|einem|einen|dem|den) nachbarn[^\\n]{0,40}(?:zugestellt|abgegeben|[uü]bergeben)"
+      - "(?:beim|bei ihrem) nachbarn abgegeben"
+  - status: ready_for_pickup
+    patterns:
+      - "liegt[^\\n]{0,60}(?:zur abholung|abholbereit)"
+      - "k[oö]nnen sie[^\\n]{0,60}abholen"
+      - "(?:im|in einem|in den) (?:gls[- ])?parcel ?shop[^\\n]{0,40}(?:abgegeben|zugestellt|hinterlegt)"
+  - status: delivery_failed
+    patterns:
+      - "nicht angetroffen"
+      - "konnten wir[^\\n]{0,40}nicht (?:zustellen|antreffen)"
+      - "zustellung[^\\n]{0,20}nicht m[oö]glich"
+  - status: returned
+    patterns:
+      - "an den absender zur[uü]ck"
+  - status: delayed
+    patterns:
+      - "verz[oö]gert"
+      - "versp[aä]tet"
+  - status: out_for_delivery
+    patterns:
+      - "kommt heute"
+      - "wird heute[^\\n]{0,40}zugestellt"
+      - "ist in zustellung"
+  - status: label_created
+    patterns:
+      - "paketdaten[^\\n]{0,40}(?:[uü]bermittelt|erhalten)"
+      - "wurde (?:uns )?angek(?:ue|[uü])ndigt"
+  - status: in_transit
+    patterns:
+      - "auf dem weg zu ihnen"
+      - "ist unterwegs"
+
+dates:
+  eta_patterns:
+    - "zeitfenster:?\\s*(?P<value>[^\\n]{3,90})"
+    - "kommt[^\\S\\n]+(?P<value>(?:heute|morgen|[uü]bermorgen|am\\s)[^\\n]{0,80})"
+    - "voraussichtlich(?:e[rsn]?)?\\s*(?:zustellung|lieferung|zustelltag)?:?[^\\S\\n]*(?P<value>[^\\n]{3,90})"
+    - "zustellung\\s*(?:am|:)\\s*(?P<value>[^\\n]{3,90})"
+    - "n[aä]chste[rn]?\\s+zustellversuch[^\\S\\n]*(?:am|:)?[^\\S\\n]*(?P<value>[^\\n]{3,60})"
+  delivered_patterns:
+    - "zugestellt[^\\S\\n]*(?:am|um)[^\\S\\n]*(?P<value>[^\\n]{3,60})"
+
+fields:
+  # Der Doppelpunkt ist Pflicht — sonst wird aus „der Versender hat …" ein Name.
+  sender:
+    - "(?:absender|versender):\\s*(?P<value>[^\\n]{2,60})"
+    - "im auftrag von\\s*(?P<value>[^\\n]{2,60})"
+  order_number:
+    - "bestellnummer:?\\s*(?P<value>[A-Z0-9][A-Z0-9-]{3,29})"
+  pickup_location:
+    - "abholort:?\\s*(?P<value>[^\\n]{2,80})"
+    - "nachbarn?[^\\n]{0,20}:\\s*(?P<value>[^\\n]{2,80})"
+  pickup_code:
+    - "abhol-?code:?\\s*(?P<value>[A-Z0-9]{4,12})"
+  destination_raw:
+    - "(?:liefer|zustell|empf[aä]nger)adresse:?\\s*(?P<value>[^\\n]{5,120})"

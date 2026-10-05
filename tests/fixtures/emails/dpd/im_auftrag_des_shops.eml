@@ -1,0 +1,21 @@
+From: =?UTF-8?Q?Kaffeer=C3=B6sterei_Nord?= <versand@kaffee-nord.example>
+To: max.mustermann@example.org
+Subject: Ihr Paket ist unterwegs
+Date: Tue, 28 Jul 2026 09:15:00 +0200
+Message-ID: <shop-dpd@kaffee-nord.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+Hallo Max Mustermann,
+
+Ihre Bestellung ist unterwegs und wird von DPD zugestellt.
+
+Bestellnummer: KN-2026-4711
+Paketnummer: 09981122334461
+
+Sendung verfolgen:
+https://tracking.dpd.de/parcelstatus?query=09981122334461&locale=de_DE
+
+Vielen Dank für Ihren Einkauf!
+Kaffeerösterei Nord

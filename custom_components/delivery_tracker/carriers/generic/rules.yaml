@@ -1,0 +1,48 @@
+# Regelsatz des generischen Fallbacks.
+#
+# Greift nur, wenn kein spezifisches Plugin eine Sendung liefert — die
+# niedrigste Bewertung und Prioritaet sorgen dafuer, dass er immer als Letzter
+# gefragt wird. Welche Fundstellen er annimmt, entscheidet das Plugin selbst
+# (`__init__.py`): nur Nummern mit stimmender Pruefziffer, sonst nichts. Ohne
+# diese Haerte erzeugt er Geistersendungen aus Rechnungs- und Kundennummern.
+
+carrier: generic
+name: Unbekannter Zusteller
+score_bonus: -100
+priority: -100
+
+tracking:
+  # Nur Formate mit Pruefziffer. Bewusst nicht dabei: die 12- und 14-stelligen
+  # Ziffernfolgen der Deutschen Post — DPD, GLS und Hermes nutzen dieselben
+  # Laengen ohne dieses Verfahren, und jede zehnte ihrer Nummern wuerde
+  # zufaellig als DHL-Sendung durchgehen.
+  patterns:
+    - "\\b(1Z[0-9A-Z]{16})\\b"
+    - "\\b([A-Z]{2}\\d{9}[A-Z]{2})\\b"
+    - "\\b(\\d{20})\\b"
+    - "\\b(\\d{18})\\b"
+  # Der Zusteller ist ja gerade unbekannt — 17track kennt sie alle.
+  url: "https://t.17track.net/de#nums={tracking_number}"
+  checksum:
+    - ups
+    - upu_s10
+    - gs1
+  require_context: true
+
+# Nur unmissverstaendliche Formulierungen — was sich nicht erschliesst, bleibt
+# `unknown` und wird spaeter ueber eine API angereichert (Step 3.1).
+status_map:
+  - status: delivered
+    patterns:
+      - "wurde (?:heute |erfolgreich )?zugestellt"
+      - "(?:has been|was) delivered"
+  - status: in_transit
+    patterns:
+      - "(?:wurde|ist) (?:heute )?(?:versandt|versendet|verschickt)"
+      - "has (?:been )?shipped"
+
+fields:
+  order_number:
+    - "bestellnummer:?\\s*(?P<value>[A-Z0-9][A-Z0-9-]{3,29})"
+  destination_raw:
+    - "(?:liefer|versand)adresse:?\\s*(?P<value>[^\\n]{5,120})"

@@ -1,0 +1,34 @@
+Delivered-To: max.mustermann@example.org
+From: myDPD <no-reply@dpd.de>
+To: max.mustermann@example.org
+Subject: Verfolgen Sie Ihr Paket 09981122334455.
+Date: Mon, 27 Jul 2026 10:24:11 +0200
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 8bit
+Message-ID: <dpd-unterwegs@www3-mydpd21>
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN" "http://www.w3.org/TR/REC-html40/loose.dtd">
+<html><head><style type="text/css">body { background-color: white; }</style>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"></head>
+<body><div align="center">
+<table class="header" cellspacing="0" cellpadding="0"><tbody>
+<tr><td align="left" valign="top"><img style="display: block;" src="https://business.dpd.de/Images/mail/email_header_ordertracking_deu.jpg" alt="Information zu Ihrer Sendung." height="309" width="600" usemap="#dpdlogo"><map name="dpdlogo"><area shape="rect" coords="465,15,590,75" href="https://www.dpd.com/de" target="blank_"></map></td></tr>
+<tr><td align="left" valign="top"><table border="0" cellpadding="30" cellspacing="0" width="600"><tbody><tr><td>
+<p>Lieber Empfänger,</p>
+<p>Ihr Paket ist auf dem Weg zu Ihnen.</p>
+<p>Damit Sie uns nicht verpassen, können Sie Ihr Paket hier verfolgen:</p>
+<p><!--<a href="https://tracking.dpd.de/parcelstatus?query=09981122334455&locale=de_DE" target="blank_"><img src="https://business.dpd.de/Images/mail/btn_paketverfolgung_deu.gif" alt="Paketverfolgung"/></a>--><a href="https://my.dpd.de/redirect.aspx?action=12&parcelno=09981122334455&zip=12345&lng=deu" target="blank_" style="color:#ffffff"><img width="282" height="104" src="https://business.dpd.de/Images/mail/btn_paketverfolgung_deu.gif" alt="Paketverfolgung" style="display:block; border-style: none;"/></a></p>
+<p>Bei Fragen helfen wir Ihnen gerne weiter.</p>
+<p>Viele Grüße<br />Ihr DPD Team</p>
+</td></tr></tbody></table></td></tr>
+</tbody></table><br/>
+<table width="600" cellpadding="0" cellspacing="0" border="0"><tr><td>
+<a href="https://www.dpd.de" target="_blank" class="dpdlink">dpd.de</a>
+</td><td valign="bottom" align="right"><a href="https://www.geopost.com/en" target="_blank"><img src="https://business.dpd.de/Images/mail/email_footer_dpdicon.png" alt="dpdgroup"></a></td></tr>
+<tr><td colspan="2"><font face="arial,helvetica,sans-serif" size="1" color="#808285"><span>
+DPD Deutschland GmbH, Wailandtstraße 1, 63741 Aschaffenburg<br/>
+Sitz der Gesellschaft: Aschaffenburg | Registergericht: Amtsgericht Aschaffenburg, HRB 8887<br/><br/>
+Auf diese E-Mail k&ouml;nnen Sie leider nicht antworten. Bei R&uuml;ckfragen stehen wir Ihnen gerne per E-Mail unter <a class="footerlinks" href="mailto:empfangen@dpd.de">empfangen@dpd.de</a> zur Verf&uuml;gung. Die E-Mail dient lediglich zu Ihrer Information. Sie wird nicht f&uuml;r werbliche Zwecke genutzt.
+</span></font></td></tr>
+</table></div></body></html>

@@ -1,0 +1,117 @@
+# Regelsatz UPS.
+#
+# UPS schreibt deutschen Empfaengern teils englisch — alle Status-Muster stehen
+# deshalb in beiden Sprachen. Die Datumsauswertung versteht nur deutsche
+# Angaben; ein englischer Termin („07/30/2026") bleibt lieber leer als falsch.
+# Aufbau und Bedeutung aller Felder stehen in `carriers/example/`.
+
+carrier: ups
+name: UPS
+
+match:
+  from_domains:
+    - ups.com
+    - ups.de
+  subject_patterns:
+    - "\\bups\\b"
+  body_patterns:
+    - "united parcel service"
+    - "ups\\.com"
+    - "ups access point"
+  newsletter_patterns:
+    - "gewinnspiel"
+    - "jetzt (?:entdecken|shoppen|sichern)"
+    - "\\d+\\s*%\\s*(?:rabatt|off)"
+    - "ups my choice premium"
+
+tracking:
+  # `1Z` + 16 Zeichen, gern in Gruppen gesetzt („1Z 999 AA1 01 2345 6784").
+  # Die Pruefziffer ist das harte Kriterium, ein Kontextwort braucht es daneben
+  # nicht.
+  patterns:
+    - "\\b(1Z[0-9A-Z]{16})\\b"
+    - "\\b(1Z ?[0-9A-Z]{3} ?[0-9A-Z]{3} ?[0-9A-Z]{2} ?[0-9A-Z]{4} ?[0-9A-Z]{4})\\b"
+  url: "https://www.ups.com/track?loc=de_DE&tracknum={tracking_number}"
+  checksum:
+    - ups
+  require_context: false
+
+# Abholbereit steht oben: „wurde an den UPS Access Point zugestellt" ist fuer
+# den Empfaenger keine Zustellung, sondern ein Abholauftrag.
+status_map:
+  - status: ready_for_pickup
+    patterns:
+      - "access point[^\\n]{0,80}(?:zugestellt|abgegeben|abholbereit|abgeholt werden|zur abholung)"
+      - "liegt[^\\n]{0,60}(?:zur abholung|abholbereit)"
+      - "ready for pick ?up"
+      - "available for pick ?up"
+      - "delivered to (?:a |the )?(?:ups )?access point"
+  - status: delivered
+    patterns:
+      - "wurde (?:heute |erfolgreich )?(?:an sie )?zugestellt"
+      - "(?:an|bei) (?:ihren|ihrem|einen|einem) nachbarn[^\\n]{0,40}(?:zugestellt|abgegeben|[uü]bergeben)"
+      - "(?:has been|was) delivered"
+      - "\\bdelivered on\\b"
+      - "left (?:with|at) (?:your |a )?neighbo(?:u)?r"
+  - status: delivery_failed
+    patterns:
+      - "nicht angetroffen"
+      - "konnten wir[^\\n]{0,40}nicht (?:zustellen|antreffen)"
+      - "zustellversuch[^\\n]{0,30}(?:nicht erfolgreich|erfolglos)"
+      - "delivery attempt"
+      - "we missed you"
+      - "(?:could not|unable to) (?:be )?deliver"
+  - status: returned
+    patterns:
+      - "an den absender zur[uü]ck"
+      - "returned to (?:the )?sender"
+  - status: delayed
+    patterns:
+      - "verz[oö]gert"
+      - "versp[aä]tet"
+      - "\\bdelay(?:ed)?\\b"
+  - status: out_for_delivery
+    patterns:
+      - "wird heute[^\\n]{0,40}zugestellt"
+      - "kommt heute"
+      - "ist in zustellung"
+      - "out for delivery"
+      - "will be delivered today"
+  - status: label_created
+    patterns:
+      - "versandetikett[^\\n]{0,40}erstellt"
+      - "(?:shipping )?label (?:has been )?created"
+      - "created a (?:shipping )?label"
+  - status: in_transit
+    patterns:
+      - "ist unterwegs"
+      - "auf dem weg zu ihnen"
+      - "wurde versandt"
+      - "\\bin transit\\b"
+      - "(?:is )?on (?:its|the) way"
+      - "has shipped"
+
+dates:
+  eta_patterns:
+    - "(?:voraussichtliche|geplante) zustellung:?[^\\S\\n]*(?P<value>[^\\n]{3,90})"
+    - "(?:scheduled|estimated) delivery(?: date)?:?[^\\S\\n]*(?P<value>[^\\n]{3,90})"
+    - "zustellung\\s*(?:am|:)\\s*(?P<value>[^\\n]{3,90})"
+    - "n[aä]chste[rn]?\\s+zustellversuch[^\\S\\n]*(?:am|:)?[^\\S\\n]*(?P<value>[^\\n]{3,60})"
+  delivered_patterns:
+    - "zugestellt[^\\S\\n]*(?:am|um)[^\\S\\n]*(?P<value>[^\\n]{3,60})"
+
+fields:
+  # Der Doppelpunkt ist Pflicht — sonst wird aus „der Versender hat …" ein Name.
+  sender:
+    - "(?:absender|versender|shipper|shipped from):\\s*(?P<value>[^\\n]{2,60})"
+  order_number:
+    - "bestellnummer:?\\s*(?P<value>[A-Z0-9][A-Z0-9-]{3,29})"
+  # „Abholort:" zuerst — „UPS Access Point" allein steht auch im Betreff, und
+  # dort folgt keine Anschrift.
+  pickup_location:
+    - "abholort:?\\s*(?P<value>[^\\n]{2,80})"
+    - "(?P<value>ups access point[^\\n]{0,100})"
+    - "nachbarn?[^\\n]{0,20}:\\s*(?P<value>[^\\n]{2,80})"
+  destination_raw:
+    - "(?:liefer|zustell|empf[aä]nger)adresse:?\\s*(?P<value>[^\\n]{5,120})"
+    - "ship to:?\\s*(?P<value>[^\\n]{5,120})"
