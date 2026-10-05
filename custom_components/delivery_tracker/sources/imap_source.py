@@ -26,6 +26,7 @@ Zugangsdaten stehen in keinem Log und in keinem `repr`.
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import logging
 import re
@@ -49,6 +50,16 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.ssl import client_context, create_no_verify_ssl_context
 
 from ..const import (
+    CONF_FOLDER,
+    CONF_LOOKBACK_DAYS,
+    CONF_PASSWORD,
+    CONF_POLL_INTERVAL,
+    CONF_PORT,
+    CONF_SECURITY,
+    CONF_SERVER,
+    CONF_USE_IDLE,
+    CONF_USERNAME,
+    CONF_VERIFY_SSL,
     DEFAULT_IMAP_COMMAND_TIMEOUT,
     DEFAULT_IMAP_FOLDER,
     DEFAULT_IMAP_LOOKBACK_DAYS,
@@ -176,6 +187,8 @@ class ImapConfig:
     verify_ssl: bool = True
     folder: str = DEFAULT_IMAP_FOLDER
     search: str = DEFAULT_IMAP_SEARCH
+    use_idle: bool = True
+    """False erzwingt Polling, auch wenn der Server IDLE anbietet."""
     poll_interval: float = DEFAULT_IMAP_POLL_INTERVAL
     lookback_days: int = DEFAULT_IMAP_LOOKBACK_DAYS
     """Wie weit der allererste Durchlauf zurueckschaut; danach nur noch neue Mails."""
@@ -192,6 +205,23 @@ class ImapConfig:
         if self.security is ImapSecurity.SSL:
             return DEFAULT_IMAP_PORT_SSL
         return DEFAULT_IMAP_PORT_PLAIN
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, Any]) -> Self:
+        """Aus den Daten eines `mailbox`-Subentrys bauen."""
+        port = data.get(CONF_PORT)
+        return cls(
+            server=str(data[CONF_SERVER]),
+            username=str(data[CONF_USERNAME]),
+            password=str(data[CONF_PASSWORD]),
+            port=int(port) if port else None,
+            security=ImapSecurity(data.get(CONF_SECURITY, ImapSecurity.SSL)),
+            verify_ssl=bool(data.get(CONF_VERIFY_SSL, True)),
+            folder=str(data.get(CONF_FOLDER) or DEFAULT_IMAP_FOLDER),
+            use_idle=bool(data.get(CONF_USE_IDLE, True)),
+            poll_interval=float(data.get(CONF_POLL_INTERVAL, DEFAULT_IMAP_POLL_INTERVAL)),
+            lookback_days=int(data.get(CONF_LOOKBACK_DAYS, DEFAULT_IMAP_LOOKBACK_DAYS)),
+        )
 
 
 @dataclass(slots=True)
@@ -531,13 +561,7 @@ class ImapSource(TrackingSource):
         self._connection_lost = lost
         client = self._create_client(lost)
         try:
-            await client.wait_hello_from_server()
-            if self.config.security is ImapSecurity.STARTTLS:
-                await self._async_starttls(client)
-            if client.protocol.state == NONAUTH:
-                await client.login(self.config.username, self.config.password)
-            if client.protocol.state not in (AUTH, SELECTED):
-                raise ImapAuthError(f"Anmeldung an {self.config.server} abgelehnt")
+            await self._async_login(client)
             await self._async_select(client)
         except ImapError:
             await _async_shutdown_client(client)
@@ -547,12 +571,45 @@ class ImapSource(TrackingSource):
             raise ImapConnectionError(f"Verbindung zu {self.config.server} fehlgeschlagen") from err
 
         self._client = client
-        self._supports_idle = client.has_capability("IDLE")
+        self._supports_idle = self.config.use_idle and client.has_capability("IDLE")
         self._state = ImapState.CONNECTED
         self._last_error = None
         _LOGGER.debug(
             "%s: verbunden, Ordner %s, Modus %s", self, self.config.folder, self.mode.value
         )
+
+    async def _async_login(self, client: IMAP4) -> None:
+        """Begruessung abwarten, ggf. STARTTLS und anmelden."""
+        await client.wait_hello_from_server()
+        if self.config.security is ImapSecurity.STARTTLS:
+            await self._async_starttls(client)
+        if client.protocol.state == NONAUTH:
+            await client.login(self.config.username, self.config.password)
+        if client.protocol.state not in (AUTH, SELECTED):
+            raise ImapAuthError(f"Anmeldung an {self.config.server} abgelehnt")
+
+    async def async_list_folders(self) -> list[MailFolder]:
+        """Anmelden und die auswaehlbaren Ordner auflisten, ohne einen zu oeffnen.
+
+        Fuer den Verbindungstest im Config-Flow: Die Verbindung wird danach
+        sofort wieder geschlossen und beruehrt den Zustand dieser Quelle nicht.
+        Wirft `ImapAuthError` bzw. `ImapConnectionError` wie `async_setup`.
+        """
+        client = self._create_client(asyncio.Event())
+        try:
+            await self._async_login(client)
+            response = await client.list('""', "*")
+        except ImapError:
+            raise
+        except _CONNECTION_ERRORS as err:
+            raise ImapConnectionError(f"Verbindung zu {self.config.server} fehlgeschlagen") from err
+        finally:
+            await _async_shutdown_client(client)
+        if response.result != "OK":
+            # Ohne Ordnerliste bleibt im Flow die freie Eingabe — kein Grund zum Abbruch.
+            _LOGGER.debug("%s: LIST wurde abgelehnt: %s", self, response.result)
+            return []
+        return _parse_folder_list(response.lines)
 
     def _create_client(self, lost: asyncio.Event) -> IMAP4:
         """Den aioimaplib-Client passend zur Transportsicherheit anlegen."""
@@ -602,7 +659,7 @@ class ImapSource(TrackingSource):
 
     async def _async_select(self, client: IMAP4) -> None:
         """Ordner waehlen und den Fortschritt gegen `UIDVALIDITY` pruefen."""
-        response = await client.select(self.config.folder)
+        response = await client.select(_quote_mailbox(self.config.folder))
         if response.result != "OK" or client.protocol.state != SELECTED:
             raise ImapFolderError(f"Ordner {self.config.folder!r} ist nicht auswaehlbar")
 
@@ -689,6 +746,72 @@ def _parse_uid_validity(lines: Iterable[Any]) -> int | None:
         if match:
             return int(match.group(1))
     return None
+
+
+@dataclass(frozen=True, slots=True)
+class MailFolder:
+    """Ein auswaehlbarer Ordner aus der LIST-Antwort."""
+
+    name: str
+    """Name, wie ihn der Server erwartet (modified UTF-7, RFC 3501 Abschnitt 5.1.3)."""
+    label: str
+    """Lesbarer Name fuer die Auswahlliste."""
+
+
+# `* LIST (\HasNoChildren) "/" "INBOX"` — aioimaplib liefert die Zeile ohne `* LIST`.
+_LIST_LINE_RE: Final = re.compile(
+    rb'^\((?P<flags>[^)]*)\) (?:"(?:[^"\\]|\\.)*"|NIL) (?P<name>\S.*)$', re.IGNORECASE
+)
+_UNSELECTABLE_FLAGS: Final = (b"\\noselect", b"\\nonexistent")
+_MUTF7_RE: Final = re.compile(r"&([A-Za-z0-9+,]*)-")
+# Ordnernamen, die ohne Anfuehrungszeichen als IMAP-Atom durchgehen.
+_ATOM_RE: Final = re.compile(r"^[A-Za-z0-9._/&+\-]+$")
+
+
+def _parse_folder_list(lines: Iterable[Any]) -> list[MailFolder]:
+    """Die auswaehlbaren Ordner aus den Zeilen einer LIST-Antwort lesen."""
+    folders: dict[str, MailFolder] = {}
+    for line in lines:
+        # Ordnernamen als Literal (`{12}`) liefert kaum ein Server; sie fallen weg.
+        if not isinstance(line, bytes):
+            continue
+        match = _LIST_LINE_RE.match(line)
+        if match is None:
+            continue
+        if any(flag in match.group("flags").lower() for flag in _UNSELECTABLE_FLAGS):
+            continue
+        name = match.group("name").decode("utf-8", "replace").strip()
+        if len(name) >= 2 and name[0] == name[-1] == '"':
+            name = name[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+        folders.setdefault(name, MailFolder(name, _decode_modified_utf7(name)))
+    # INBOX zuerst, der Rest alphabetisch — so steht der Normalfall oben.
+    return sorted(
+        folders.values(), key=lambda folder: (folder.name.upper() != "INBOX", folder.label)
+    )
+
+
+def _decode_modified_utf7(value: str) -> str:
+    """Ordnernamen wie `Gel&APY-scht` lesbar machen; Unlesbares bleibt, wie es ist."""
+
+    def _replace(match: re.Match[str]) -> str:
+        encoded = match.group(1)
+        if not encoded:
+            return "&"
+        encoded = encoded.replace(",", "/")
+        return base64.b64decode(encoded + "=" * (-len(encoded) % 4)).decode("utf-16-be")
+
+    try:
+        return _MUTF7_RE.sub(_replace, value)
+    except ValueError:
+        return value
+
+
+def _quote_mailbox(name: str) -> str:
+    """Einen Ordnernamen fuer SELECT aufbereiten; „Sent Items" braucht Anfuehrungszeichen."""
+    if _ATOM_RE.match(name) or (len(name) >= 2 and name[0] == name[-1] == '"'):
+        return name
+    escaped = name.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 def _imap_date(value: datetime) -> str:

@@ -12,5 +12,192 @@
     "abort": {
       "single_instance_allowed": "Es ist bereits eine Instanz von Delivery Tracker eingerichtet."
     }
+  },
+  "config_subentries": {
+    "mailbox": {
+      "entry_type": "Postfach",
+      "initiate_flow": {
+        "user": "Postfach hinzufügen"
+      },
+      "step": {
+        "user": {
+          "title": "Postfach hinzufügen",
+          "description": "Zugangsdaten des IMAP-Postfachs. Die Verbindung wird vor dem Speichern getestet.",
+          "data": {
+            "server": "Server",
+            "port": "Port",
+            "security": "Verschlüsselung",
+            "verify_ssl": "Zertifikat prüfen",
+            "username": "Benutzername",
+            "password": "Passwort"
+          },
+          "data_description": {
+            "port": "Leer lassen für den Standardport (993 bei SSL/TLS, sonst 143).",
+            "verify_ssl": "Nur für Server mit selbstsigniertem Zertifikat abschalten."
+          }
+        },
+        "reconfigure": {
+          "title": "Postfach bearbeiten",
+          "description": "Zugangsdaten des IMAP-Postfachs. Ein leeres Passwortfeld behält das gespeicherte Passwort.",
+          "data": {
+            "server": "Server",
+            "port": "Port",
+            "security": "Verschlüsselung",
+            "verify_ssl": "Zertifikat prüfen",
+            "username": "Benutzername",
+            "password": "Passwort"
+          },
+          "data_description": {
+            "port": "Leer lassen für den Standardport (993 bei SSL/TLS, sonst 143).",
+            "verify_ssl": "Nur für Server mit selbstsigniertem Zertifikat abschalten."
+          }
+        },
+        "folder": {
+          "title": "Ordner und Abruf",
+          "description": "Die Anmeldung an {server} war erfolgreich. Wähle den Ordner, in dem die Paketmails ankommen.",
+          "data": {
+            "folder": "Ordner",
+            "use_idle": "Push per IDLE",
+            "poll_interval": "Abfrageintervall",
+            "lookback_days": "Rückblick beim ersten Abruf"
+          },
+          "data_description": {
+            "use_idle": "Neue Mails kommen sofort an, wenn der Server IDLE unterstützt. Sonst wird im Abfrageintervall gesucht.",
+            "lookback_days": "Wie viele Tage alte, ungelesene Mails beim ersten Abruf berücksichtigt werden."
+          }
+        }
+      },
+      "error": {
+        "cannot_connect": "Der Server ist nicht erreichbar. Server, Port und Verschlüsselung prüfen.",
+        "invalid_auth": "Benutzername oder Passwort werden vom Server abgelehnt.",
+        "folder_not_found": "Den Ordner gibt es auf dem Server nicht, oder er lässt sich nicht öffnen.",
+        "unknown": "Unerwarteter Fehler, Details stehen im Log."
+      },
+      "abort": {
+        "already_configured": "Dieses Postfach mit diesem Ordner ist bereits eingerichtet.",
+        "reconfigure_successful": "Das Postfach wurde aktualisiert."
+      }
+    },
+    "destination": {
+      "entry_type": "Zieladresse",
+      "initiate_flow": {
+        "user": "Zieladresse hinzufügen"
+      },
+      "step": {
+        "user": {
+          "title": "Zieladresse hinzufügen",
+          "description": "Woran eine Sendung für diese Adresse zu erkennen ist. Alle Regeln sind optional, mindestens eine ist nötig. Mehrere Einträge je Feld sind Alternativen, etwa verschiedene Schreibweisen.",
+          "data": {
+            "name": "Name",
+            "recipient_names": "Empfängernamen",
+            "streets": "Straßen mit Hausnummer",
+            "postal_codes": "Postleitzahlen",
+            "cities": "Orte",
+            "packstations": "Packstation- oder Filialnummern",
+            "post_numbers": "DHL-Postnummern",
+            "emails": "Empfänger-Mailadressen",
+            "keywords": "Schlüsselwörter"
+          },
+          "data_description": {
+            "emails": "„@example.com“ steht für die ganze Domain, Plus-Aliase werden erkannt.",
+            "keywords": "Freie Begriffe aus der Adresszeile, etwa ein Firmenname."
+          }
+        },
+        "reconfigure": {
+          "title": "Zieladresse bearbeiten",
+          "description": "Woran eine Sendung für diese Adresse zu erkennen ist. Bestehende Sendungen werden nach dem Speichern neu zugeordnet.",
+          "data": {
+            "name": "Name",
+            "recipient_names": "Empfängernamen",
+            "streets": "Straßen mit Hausnummer",
+            "postal_codes": "Postleitzahlen",
+            "cities": "Orte",
+            "packstations": "Packstation- oder Filialnummern",
+            "post_numbers": "DHL-Postnummern",
+            "emails": "Empfänger-Mailadressen",
+            "keywords": "Schlüsselwörter"
+          },
+          "data_description": {
+            "emails": "„@example.com“ steht für die ganze Domain, Plus-Aliase werden erkannt.",
+            "keywords": "Freie Begriffe aus der Adresszeile, etwa ein Firmenname."
+          }
+        }
+      },
+      "error": {
+        "invalid_name": "Dieser Name ist nicht zulässig. „Unbekannt“ ist für nicht zugeordnete Sendungen reserviert.",
+        "name_exists": "Eine Zieladresse mit diesem Namen gibt es bereits.",
+        "no_rules": "Mindestens eine Regel ist nötig, sonst wird der Adresse nie eine Sendung zugeordnet."
+      },
+      "abort": {
+        "reconfigure_successful": "Die Zieladresse wurde aktualisiert."
+      }
+    },
+    "api_source": {
+      "entry_type": "API-Quelle",
+      "initiate_flow": {
+        "user": "API-Quelle hinzufügen"
+      },
+      "step": {
+        "user": {
+          "title": "API-Quelle hinzufügen",
+          "description": "Eine Tracking-API liefert den Sendungsstatus direkt vom Zusteller.",
+          "data": {
+            "source_type": "Quelle",
+            "api_key": "API-Schlüssel",
+            "scan_interval": "Abfrageintervall"
+          }
+        },
+        "reconfigure": {
+          "title": "API-Quelle bearbeiten",
+          "description": "Einstellungen für {source}. Ein leeres Schlüsselfeld behält den gespeicherten Schlüssel.",
+          "data": {
+            "api_key": "API-Schlüssel",
+            "scan_interval": "Abfrageintervall"
+          }
+        }
+      },
+      "error": {
+        "invalid_api_key": "Der API-Schlüssel ist ungültig.",
+        "unknown": "Unerwarteter Fehler, Details stehen im Log."
+      },
+      "abort": {
+        "already_configured": "Diese Quelle ist bereits eingerichtet.",
+        "reconfigure_successful": "Die API-Quelle wurde aktualisiert."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Einstellungen",
+        "description": "Globale Einstellungen für alle Postfächer und Quellen.",
+        "data": {
+          "retention_days": "Aufbewahrung nach Zustellung",
+          "stale_days": "Verfall ohne Aktualisierung",
+          "enabled_carriers": "Aktive Zusteller",
+          "generic_fallback": "Generischer Fallback"
+        },
+        "data_description": {
+          "retention_days": "So lange bleiben abgeschlossene Sendungen sichtbar. 0 behält sie unbegrenzt.",
+          "stale_days": "Sendungen, die so lange keine Aktualisierung bekommen haben, werden entfernt, auch wenn sie nie abgeschlossen wurden. 0 schaltet das ab.",
+          "enabled_carriers": "Mails abgeschalteter Zusteller werden nicht ausgewertet.",
+          "generic_fallback": "Erkennt Sendungen unbekannter Zusteller anhand allgemeiner Muster."
+        }
+      }
+    }
+  },
+  "selector": {
+    "security": {
+      "options": {
+        "ssl": "SSL/TLS",
+        "starttls": "STARTTLS",
+        "none": "Keine (unverschlüsselt)"
+      }
+    },
+    "source_type": {
+      "options": {
+        "seventeentrack": "17TRACK"
+      }
+    }
   }
 }

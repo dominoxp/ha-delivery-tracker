@@ -1,7 +1,7 @@
 """Ein echter, kleiner IMAP4rev1-Server fuer die Tests.
 
 Kein Mock: Der Server spricht ueber einen echten Socket und implementiert genau
-die Befehle, die die Integration benutzt — LOGIN, SELECT, UID SEARCH, UID FETCH,
+die Befehle, die die Integration benutzt — LOGIN, LIST, SELECT, UID SEARCH, UID FETCH,
 UID STORE, IDLE, NOOP, CLOSE, LOGOUT, CAPABILITY und optional STARTTLS.
 
 Damit lassen sich die Faelle testen, die mit Mocks nur behauptet werden koennen:
@@ -141,16 +141,22 @@ class FakeImapServer:
         password: str = "s3cr3t-pw",
         capabilities: Sequence[str] = DEFAULT_CAPABILITIES,
         folders: Sequence[str] = ("INBOX",),
+        noselect_folders: Sequence[str] = (),
         ssl_context: ssl.SSLContext | None = None,
         starttls_context: ssl.SSLContext | None = None,
     ) -> None:
-        """Server konfigurieren; gestartet wird er erst mit `start`."""
+        """Server konfigurieren; gestartet wird er erst mit `start`.
+
+        `noselect_folders` tauchen in LIST auf, lassen sich aber nicht oeffnen —
+        wie reine Elternordner bei vielen Servern.
+        """
         self.username = username
         self.password = password
         self.capabilities = list(capabilities)
         if starttls_context is not None and "STARTTLS" not in self.capabilities:
             self.capabilities.append("STARTTLS")
         self.mailboxes = {name: FakeMailbox(name) for name in folders}
+        self.noselect_folders = list(noselect_folders)
         self.ssl_context = ssl_context
         self.starttls_context = starttls_context
         self._server: asyncio.Server | None = None
@@ -281,6 +287,8 @@ class _Session:
                 self._cmd_login(tag, args)
             case "SELECT" | "EXAMINE":
                 self._cmd_select(tag, args)
+            case "LIST":
+                self._cmd_list(tag)
             case "CLOSE":
                 self._selected = None
                 self._send(f"{tag} OK CLOSE completed")
@@ -330,6 +338,15 @@ class _Session:
         self._send(f"* OK [UIDVALIDITY {mailbox.uid_validity}] UIDs gueltig")
         self._send(f"* OK [UIDNEXT {mailbox.uid_next}] naechste UID")
         self._send(f"{tag} OK [READ-WRITE] SELECT completed")
+
+    def _cmd_list(self, tag: str) -> None:
+        """Alle Ordner auflisten (Referenz und Muster werden ignoriert)."""
+        self._require_auth()
+        for name in self._server.mailboxes:
+            self._send(f'* LIST (\\HasNoChildren) "/" "{name}"')
+        for name in self._server.noselect_folders:
+            self._send(f'* LIST (\\Noselect \\HasChildren) "/" "{name}"')
+        self._send(f"{tag} OK LIST completed")
 
     def _cmd_uid(self, tag: str, args: list[str]) -> None:
         """`UID SEARCH`, `UID FETCH` und `UID STORE`."""

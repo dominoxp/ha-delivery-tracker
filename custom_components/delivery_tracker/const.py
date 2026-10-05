@@ -20,11 +20,68 @@ STORAGE_SAVE_DELAY: Final = 10
 # Konfigurationsfelder des Entries.
 CONF_NAME: Final = "name"
 
+# Subentry-Typen: Die eigentliche Konfiguration liegt in Subentries am Hub-Entry.
+SUBENTRY_MAILBOX: Final = "mailbox"
+SUBENTRY_DESTINATION: Final = "destination"
+SUBENTRY_API_SOURCE: Final = "api_source"
+
+# Felder eines `mailbox`-Subentrys.
+CONF_SERVER: Final = "server"
+CONF_PORT: Final = "port"
+CONF_SECURITY: Final = "security"
+CONF_VERIFY_SSL: Final = "verify_ssl"
+CONF_USERNAME: Final = "username"
+CONF_PASSWORD: Final = "password"
+CONF_FOLDER: Final = "folder"
+CONF_USE_IDLE: Final = "use_idle"
+CONF_POLL_INTERVAL: Final = "poll_interval"
+CONF_LOOKBACK_DAYS: Final = "lookback_days"
+
+# Felder eines `destination`-Subentrys. Die Regel-Listen tragen dieselben Namen
+# wie die Felder von `models.Destination`, die Daten lassen sich also direkt
+# mit `Destination.from_dict` lesen.
+CONF_DESTINATION_ID: Final = "id"
+CONF_DESTINATION_RULES: Final = (
+    "recipient_names",
+    "streets",
+    "postal_codes",
+    "cities",
+    "packstations",
+    "post_numbers",
+    "emails",
+    "keywords",
+)
+
+# Felder eines `api_source`-Subentrys.
+CONF_SOURCE_TYPE: Final = "source_type"
+CONF_API_KEY: Final = "api_key"
+CONF_SCAN_INTERVAL: Final = "scan_interval"
+
+# Options des Hub-Entrys (globale Einstellungen).
+CONF_RETENTION_DAYS: Final = "retention_days"
+CONF_STALE_DAYS: Final = "stale_days"
+CONF_ENABLED_CARRIERS: Final = "enabled_carriers"
+"""Nur Formularfeld: Gespeichert wird die Gegenmenge `CONF_DISABLED_CARRIERS`."""
+CONF_DISABLED_CARRIERS: Final = "disabled_carriers"
+"""Abgeschaltete Zusteller. Als Negativliste, damit neu hinzugekommene Plugins
+nach einem Update automatisch aktiv sind."""
+CONF_GENERIC_FALLBACK: Final = "generic_fallback"
+
+# Carrier-ID des generischen Fallbacks; er hat im Options-Flow einen eigenen Schalter.
+CARRIER_GENERIC: Final = "generic"
+
 # Standardwerte.
 DEFAULT_NAME: Final = "Delivery Tracker"
 DEFAULT_RETENTION_DAYS: Final = 14
+# Aktive Sendungen ohne Aktualisierung verfallen nach dieser Zeit (Step 2.2).
+DEFAULT_STALE_DAYS: Final = 60
+DEFAULT_GENERIC_FALLBACK: Final = True
+DEFAULT_API_SCAN_INTERVAL: Final = 3600
+# Obergrenze fuer den Verbindungstest im Config-Flow — ein nicht erreichbarer
+# Server darf den Dialog nicht haengen lassen.
+CONNECTION_TEST_TIMEOUT: Final = 20.0
 
-# Standardwerte der IMAP-Quelle. Die Konfigurationsfelder dazu kommen in Step 2.1.
+# Standardwerte der IMAP-Quelle.
 DEFAULT_IMAP_PORT_SSL: Final = 993
 DEFAULT_IMAP_PORT_PLAIN: Final = 143
 DEFAULT_IMAP_FOLDER: Final = "INBOX"
@@ -58,6 +115,9 @@ DESTINATION_UNKNOWN_NAME: Final = "Unbekannt"
 # IDs der Datenquellen (Werte landen in `SourceRecord.source_id`).
 SOURCE_IMAP: Final = "imap"
 SOURCE_SEVENTEENTRACK: Final = "seventeentrack"
+
+# Quellentypen, die als `api_source` angelegt werden koennen.
+API_SOURCE_TYPES: Final = (SOURCE_SEVENTEENTRACK,)
 
 # Wertigkeit der Quellen beim Merge: Die API ist fuer den Status autoritativ,
 # die Mail liefert vor allem Kontext. Verfeinert wird das in Step 3.2.

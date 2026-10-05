@@ -41,6 +41,33 @@ API-Quellen lassen sich anlegen, ändern und löschen, ohne YAML anzufassen.
   nicht verschwinden.
 - Ein Postfach ohne konfigurierte Adressen muss funktionieren — alles landet dann bei „Unbekannt".
 
+## Nachtrag aus der Umsetzung (Oktober 2026)
+
+- **`entry.py`** liest die Konfiguration: `GlobalOptions.from_entry` (mit Standardwerten),
+  `destinations_from_entry`, `mailbox_configs_from_entry` (→ `ImapConfig.from_mapping`).
+  Dort liegt auch `DeliveryTrackerData` für `entry.runtime_data` (bisher Store und Zielorte);
+  2.2 ergänzt Coordinator und Quellen dort, nicht in `__init__.py`.
+- **Options:** `retention_days`, `stale_days` (für 2.2 schon angelegt, Standard 60),
+  `generic_fallback` und `disabled_carriers`. Das Formular zeigt „aktive Zusteller“, gespeichert
+  wird die **Negativliste**, damit ein neues Plugin nach einem Update automatisch aktiv ist.
+  `GlobalOptions.carrier_enabled(id)` fasst beides zusammen; das Filtern der Registry ist 2.2.
+- **Reload:** Der bestehende Update-Listener feuert in HA 2026.7 bei Options *und* bei
+  Hinzufügen/Ändern/Löschen von Subentries — deshalb kein `OptionsFlowWithReload`
+  (HA verbietet die Kombination mit Update-Listenern).
+- **Zielorte:** Die ID entsteht beim Anlegen per `slugify(name)` („Büro“ → `buro`) und bleibt bei
+  Umbenennung stabil. `unknown` und „Unbekannt“ sind gesperrt, mindestens eine Regel ist Pflicht.
+  Devices legt `async_setup_entry` an; beim Löschen des Subentrys räumt HA sie selbst ab.
+- **Umzug nach „Unbekannt“:** `async_setup_entry` lädt den Store und ruft
+  `async_assign_destinations` mit den aktuellen Zielorten — der Reload nach dem Löschen erledigt
+  den Umzug. Der Coordinator aus 2.2 übernimmt den Store aus `runtime_data`.
+- **Postfach:** zwei Schritte (Zugangsdaten → Ordner). `ImapSource.async_list_folders` meldet
+  sich an und liest `LIST` (ohne `\Noselect`, Namen aus modified UTF-7 lesbar gemacht); die
+  Auswahlliste erlaubt freie Eingabe, ein falscher Ordner fällt beim abschließenden `SELECT` als
+  `folder_not_found` auf. Neues Feld `ImapConfig.use_idle`. Gesamtzeitlimit
+  `CONNECTION_TEST_TIMEOUT`. Beim Bearbeiten bleibt ein leeres Passwortfeld beim alten Wert.
+- **API-Quelle:** Die Schlüsselprüfung für 17track ist vorerst nur formal
+  (`API_KEY_VALIDATORS` in `config_flow.py`); 3.1 ersetzt sie durch eine echte Anfrage.
+
 ## Akzeptanzkriterien
 
 - Vollständiger Flow-Test gegen die `hass`-Fixture: Entry anlegen, je ein Subentry aller drei
@@ -55,12 +82,12 @@ API-Quellen lassen sich anlegen, ändern und löschen, ohne YAML anzufassen.
 
 ## Checkliste
 
-- [ ] Haupt-Entry mit Einmaligkeitsprüfung
-- [ ] Subentry mailbox mit Verbindungstest und Ordnerauswahl
-- [ ] Subentry destination mit Match-Regeln und eigenem Device
-- [ ] Subentry api_source als Gerüst
-- [ ] reconfigure für alle drei Typen
-- [ ] Options-Flow: Retention, Carrier, generischer Fallback
-- [ ] Reload bei Änderungen
-- [ ] Übersetzungen de/en vollständig
-- [ ] Tests grün
+- [x] Haupt-Entry mit Einmaligkeitsprüfung
+- [x] Subentry mailbox mit Verbindungstest und Ordnerauswahl
+- [x] Subentry destination mit Match-Regeln und eigenem Device
+- [x] Subentry api_source als Gerüst
+- [x] reconfigure für alle drei Typen
+- [x] Options-Flow: Retention, Carrier, generischer Fallback
+- [x] Reload bei Änderungen
+- [x] Übersetzungen de/en vollständig
+- [x] Tests grün

@@ -12,5 +12,192 @@
     "abort": {
       "single_instance_allowed": "Delivery Tracker is already set up."
     }
+  },
+  "config_subentries": {
+    "mailbox": {
+      "entry_type": "Mailbox",
+      "initiate_flow": {
+        "user": "Add mailbox"
+      },
+      "step": {
+        "user": {
+          "title": "Add mailbox",
+          "description": "Credentials of the IMAP mailbox. The connection is tested before saving.",
+          "data": {
+            "server": "Server",
+            "port": "Port",
+            "security": "Encryption",
+            "verify_ssl": "Verify certificate",
+            "username": "Username",
+            "password": "Password"
+          },
+          "data_description": {
+            "port": "Leave empty for the default port (993 for SSL/TLS, otherwise 143).",
+            "verify_ssl": "Only disable for servers with a self-signed certificate."
+          }
+        },
+        "reconfigure": {
+          "title": "Edit mailbox",
+          "description": "Credentials of the IMAP mailbox. An empty password field keeps the stored password.",
+          "data": {
+            "server": "Server",
+            "port": "Port",
+            "security": "Encryption",
+            "verify_ssl": "Verify certificate",
+            "username": "Username",
+            "password": "Password"
+          },
+          "data_description": {
+            "port": "Leave empty for the default port (993 for SSL/TLS, otherwise 143).",
+            "verify_ssl": "Only disable for servers with a self-signed certificate."
+          }
+        },
+        "folder": {
+          "title": "Folder and retrieval",
+          "description": "Logged in to {server}. Choose the folder that receives the parcel emails.",
+          "data": {
+            "folder": "Folder",
+            "use_idle": "Push via IDLE",
+            "poll_interval": "Polling interval",
+            "lookback_days": "Lookback on first retrieval"
+          },
+          "data_description": {
+            "use_idle": "New emails arrive immediately if the server supports IDLE. Otherwise the folder is checked every polling interval.",
+            "lookback_days": "How many days of unread emails are considered on the first retrieval."
+          }
+        }
+      },
+      "error": {
+        "cannot_connect": "The server cannot be reached. Check server, port and encryption.",
+        "invalid_auth": "The server rejects the username or password.",
+        "folder_not_found": "The folder does not exist on the server or cannot be opened.",
+        "unknown": "Unexpected error, see the log for details."
+      },
+      "abort": {
+        "already_configured": "This mailbox with this folder is already set up.",
+        "reconfigure_successful": "The mailbox has been updated."
+      }
+    },
+    "destination": {
+      "entry_type": "Destination",
+      "initiate_flow": {
+        "user": "Add destination"
+      },
+      "step": {
+        "user": {
+          "title": "Add destination",
+          "description": "How to recognise a shipment for this address. All rules are optional, at least one is required. Several entries per field are alternatives, such as different spellings.",
+          "data": {
+            "name": "Name",
+            "recipient_names": "Recipient names",
+            "streets": "Streets with house number",
+            "postal_codes": "Postal codes",
+            "cities": "Cities",
+            "packstations": "Parcel locker or branch numbers",
+            "post_numbers": "DHL Postnummer",
+            "emails": "Recipient email addresses",
+            "keywords": "Keywords"
+          },
+          "data_description": {
+            "emails": "\"@example.com\" matches the whole domain, plus aliases are recognised.",
+            "keywords": "Free terms from the address line, such as a company name."
+          }
+        },
+        "reconfigure": {
+          "title": "Edit destination",
+          "description": "How to recognise a shipment for this address. Existing shipments are reassigned after saving.",
+          "data": {
+            "name": "Name",
+            "recipient_names": "Recipient names",
+            "streets": "Streets with house number",
+            "postal_codes": "Postal codes",
+            "cities": "Cities",
+            "packstations": "Parcel locker or branch numbers",
+            "post_numbers": "DHL Postnummer",
+            "emails": "Recipient email addresses",
+            "keywords": "Keywords"
+          },
+          "data_description": {
+            "emails": "\"@example.com\" matches the whole domain, plus aliases are recognised.",
+            "keywords": "Free terms from the address line, such as a company name."
+          }
+        }
+      },
+      "error": {
+        "invalid_name": "This name is not allowed. \"Unknown\" is reserved for unassigned shipments.",
+        "name_exists": "A destination with this name already exists.",
+        "no_rules": "At least one rule is required, otherwise no shipment is ever assigned to this destination."
+      },
+      "abort": {
+        "reconfigure_successful": "The destination has been updated."
+      }
+    },
+    "api_source": {
+      "entry_type": "API source",
+      "initiate_flow": {
+        "user": "Add API source"
+      },
+      "step": {
+        "user": {
+          "title": "Add API source",
+          "description": "A tracking API provides the shipment status directly from the carrier.",
+          "data": {
+            "source_type": "Source",
+            "api_key": "API key",
+            "scan_interval": "Polling interval"
+          }
+        },
+        "reconfigure": {
+          "title": "Edit API source",
+          "description": "Settings for {source}. An empty key field keeps the stored key.",
+          "data": {
+            "api_key": "API key",
+            "scan_interval": "Polling interval"
+          }
+        }
+      },
+      "error": {
+        "invalid_api_key": "The API key is invalid.",
+        "unknown": "Unexpected error, see the log for details."
+      },
+      "abort": {
+        "already_configured": "This source is already set up.",
+        "reconfigure_successful": "The API source has been updated."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Settings",
+        "description": "Global settings for all mailboxes and sources.",
+        "data": {
+          "retention_days": "Retention after delivery",
+          "stale_days": "Expiry without updates",
+          "enabled_carriers": "Enabled carriers",
+          "generic_fallback": "Generic fallback"
+        },
+        "data_description": {
+          "retention_days": "How long completed shipments stay visible. 0 keeps them indefinitely.",
+          "stale_days": "Shipments without an update for this long are removed, even if they never completed. 0 disables this.",
+          "enabled_carriers": "Emails from disabled carriers are not evaluated.",
+          "generic_fallback": "Detects shipments from unknown carriers using general patterns."
+        }
+      }
+    }
+  },
+  "selector": {
+    "security": {
+      "options": {
+        "ssl": "SSL/TLS",
+        "starttls": "STARTTLS",
+        "none": "None (unencrypted)"
+      }
+    },
+    "source_type": {
+      "options": {
+        "seventeentrack": "17TRACK"
+      }
+    }
   }
 }

@@ -426,3 +426,77 @@ async def test_encrypted_transports(
         await source.async_close()
     finally:
         await server.stop()
+
+
+async def test_use_idle_false_forces_polling(
+    server: FakeImapServer, make_source: Callable[..., ImapSource]
+) -> None:
+    """Ist IDLE abgeschaltet, wird gepollt, obwohl der Server IDLE anbietet."""
+    source = make_source(server, use_idle=False)
+
+    await source.async_setup()
+    await source.async_start()
+    await asyncio.sleep(0.2)
+
+    assert source.mode is ImapMode.POLLING
+    assert server.idle_starts == 0
+
+
+async def test_list_folders_returns_selectable_folders_without_selecting() -> None:
+    """Die Ordnerliste: INBOX zuerst, ohne \\Noselect, mit lesbaren Umlauten."""
+    server = FakeImapServer(
+        folders=("Pakete", "INBOX", "Gel&APY-scht", "Sent Items"),
+        noselect_folders=("Archiv",),
+    )
+    await server.start()
+    try:
+        source = ImapSource(make_config(server))
+        folders = await source.async_list_folders()
+    finally:
+        await server.stop()
+
+    assert [folder.name for folder in folders] == [
+        "INBOX",
+        "Gel&APY-scht",
+        "Pakete",
+        "Sent Items",
+    ]
+    assert folders[1].label == "Gelöscht"
+    assert source.state is ImapState.DISCONNECTED
+
+
+async def test_list_folders_rejects_wrong_password(server: FakeImapServer) -> None:
+    """Falsche Zugangsdaten fallen schon beim Auflisten auf."""
+    source = ImapSource(make_config(server, password="falsch"))
+
+    with pytest.raises(ImapAuthError):
+        await source.async_list_folders()
+
+
+async def test_folder_with_space_can_be_selected(make_source: Callable[..., ImapSource]) -> None:
+    """Ordnernamen mit Leerzeichen werden fuer SELECT in Anfuehrungszeichen gesetzt."""
+    server = FakeImapServer(folders=("INBOX", "Sent Items"))
+    await server.start()
+    try:
+        server.add_message(build_message(), folder="Sent Items")
+        handler = RecordingHandler()
+        source = make_source(server, folder="Sent Items", handler=handler)
+
+        await source.async_setup()
+        assert len(await source.async_fetch()) == 1
+        await source.async_close()
+    finally:
+        await server.stop()
+
+
+def test_config_from_mapping_uses_defaults() -> None:
+    """Subentry-Daten ohne optionale Felder ergeben eine gueltige Konfiguration."""
+    config = ImapConfig.from_mapping(
+        {"server": "imap.example.org", "username": "max", "password": "geheim", "port": None}
+    )
+
+    assert config.resolved_port == 993
+    assert config.security is ImapSecurity.SSL
+    assert config.folder == "INBOX"
+    assert config.use_idle is True
+    assert "geheim" not in repr(config)

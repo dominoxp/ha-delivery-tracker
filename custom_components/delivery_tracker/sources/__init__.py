@@ -19,6 +19,7 @@ from .imap_source import (
     ImapSecurity,
     ImapSource,
     ImapState,
+    MailFolder,
     MailHandler,
     RawMail,
 )
@@ -35,6 +36,7 @@ __all__ = [
     "ImapSecurity",
     "ImapSource",
     "ImapState",
+    "MailFolder",
     "MailHandler",
     "RawMail",
     "TrackingSource",
