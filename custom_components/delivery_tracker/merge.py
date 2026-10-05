@@ -239,6 +239,8 @@ def merge_shipments(current: Shipment, incoming: Shipment) -> Shipment:
         delivered_at=delivered_at,
         destination_id=_pick(current.destination_id, incoming.destination_id, wins),
         destination_raw=_pick(current.destination_raw, incoming.destination_raw, wins),
+        # Jede Mail nennt nur ihre eigenen Empfaenger; zusammen ergeben sie das Bild.
+        recipient_emails=merge_items(current.recipient_emails, incoming.recipient_emails),
         sender=_pick(current.sender, incoming.sender, wins),
         description=_pick(current.description, incoming.description, wins),
         items=merge_items(current.items, incoming.items),

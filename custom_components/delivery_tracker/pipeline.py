@@ -4,12 +4,16 @@ Sie klammert die drei Schritte zusammen, die zwischen Postfach und Datenmodell
 liegen, und ist damit der `MailHandler`, den die IMAP-Quelle aus Step 1.1 erwartet:
 
 ```
-Rohbytes ──▶ parse_mail ──▶ Registry.resolve ──▶ Plugin.parse_all ──▶ [Shipment]
+Rohbytes ──▶ parse_mail ──▶ Registry.resolve ──▶ Plugin.parse_all ──▶ Zieladresse ──▶ [Shipment]
 ```
 
 `resolve` fragt die zustaendigen Plugins in der Reihenfolge ihrer Bewertung,
 bis eines eine Sendung liefert — der generische Fallback kommt also auch dann
 noch zum Zug, wenn sich vorher ein spezifisches Plugin vergeblich gemeldet hat.
+
+Die Zuordnung zur Zieladresse hier ist nur der erste Stand. Massgeblich ist die
+Neubewertung nach dem Zusammenfuehren im Store (`ShipmentStore.async_assign_destinations`),
+weil erst dort alle Mails einer Sendung beisammen sind.
 
 Nichts davon darf werfen. Eine Mail, die niemand versteht, ist Normalbetrieb —
 Postfaecher enthalten weit mehr Werbung als Paketmeldungen. Verworfene Mails
@@ -21,13 +25,15 @@ darauf hinweist. Die Zaehler landen in den Diagnostics aus Step 2.6.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+from .addresses import AddressMatcher, enrich_from_mail
 from .carriers import CarrierRegistry
 from .const import SOURCE_IMAP
 from .mail import MailMessage, parse_mail
-from .models import Shipment
+from .models import Destination, Shipment
 from .sources import RawMail
 
 _LOGGER = logging.getLogger(__name__)
@@ -69,16 +75,32 @@ class PipelineStats:
 class MailPipeline:
     """Verarbeitet Rohmails zu Sendungen und fuehrt dabei Buch."""
 
-    def __init__(self, registry: CarrierRegistry, *, source_id: str = SOURCE_IMAP) -> None:
-        """Pipeline an eine Carrier-Registry binden."""
+    def __init__(
+        self,
+        registry: CarrierRegistry,
+        *,
+        source_id: str = SOURCE_IMAP,
+        destinations: Iterable[Destination] = (),
+    ) -> None:
+        """Pipeline an eine Carrier-Registry und die Zielorte binden."""
         self._registry = registry
         self._source_id = source_id
         self._stats = PipelineStats()
+        self._addresses = AddressMatcher(destinations)
 
     @property
     def stats(self) -> PipelineStats:
         """Die laufenden Kennzahlen."""
         return self._stats
+
+    @property
+    def addresses(self) -> AddressMatcher:
+        """Die aktuelle Zuordnung zu Zielorten."""
+        return self._addresses
+
+    def set_destinations(self, destinations: Iterable[Destination]) -> None:
+        """Geaenderte Zielorte uebernehmen — wirkt ab der naechsten Mail."""
+        self._addresses = AddressMatcher(destinations)
 
     def diagnostics(self) -> dict[str, Any]:
         """Zustand fuer Step 2.6."""
@@ -126,6 +148,14 @@ class MailPipeline:
                 plugin.carrier_id,
             )
             return []
+
+        try:
+            enrich_from_mail(shipments, mail)
+            self._addresses.assign_all(shipments)
+        except Exception:
+            # Eine fehlende Zuordnung ist kein Grund, die Sendung zu verlieren;
+            # der Store bewertet beim naechsten Durchlauf ohnehin neu.
+            _LOGGER.exception("Zieladresse fuer Mail %s nicht bestimmbar", mail.message_id)
 
         self._stats.matched += 1
         self._stats.shipments += len(shipments)

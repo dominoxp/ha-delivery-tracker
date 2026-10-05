@@ -30,6 +30,7 @@ def _full_shipment() -> Shipment:
         delivered_at=None,
         destination_id="zuhause",
         destination_raw="Musterstrasse 1, 12345 Musterstadt",
+        recipient_emails=["max.mustermann@example.org"],
         sender="Amazon",
         description="Kaffeebohnen 1kg (+1 weiterer Artikel)",
         items=["Kaffeebohnen 1kg", "Filtertüten Größe 4"],
@@ -171,8 +172,11 @@ def test_destination_roundtrip():
         recipient_names=["Erika Mustermann"],
         streets=["Firmenweg 7"],
         postal_codes=["12345"],
+        cities=["Musterstadt"],
         packstations=["123"],
+        post_numbers=["12345678"],
         emails=["erika@example.invalid"],
+        keywords=["Beispiel GmbH"],
     )
 
     restored = Destination.from_dict(destination.to_dict())

@@ -15,6 +15,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .addresses import AddressMatcher
 from .const import (
     DEFAULT_RETENTION_DAYS,
     STORAGE_KEY,
@@ -84,6 +85,22 @@ class ShipmentStore:
         self._shipments[merged.id] = merged
         self.async_schedule_save()
         return merged, has_status_changed(previous, merged)
+
+    @callback
+    def async_assign_destinations(self, matcher: AddressMatcher) -> list[str]:
+        """Alle Sendungen ihren Zielorten neu zuordnen.
+
+        Laeuft bei jeder Aktualisierung: Aendert der Nutzer eine Regel, ziehen
+        bestehende Sendungen beim naechsten Durchlauf um. `last_updated` bleibt
+        dabei stehen — an der Sendung selbst hat sich nichts getan.
+
+        Gibt die IDs der umgezogenen Sendungen zurueck.
+        """
+        moved = [shipment.id for shipment in matcher.assign_all(self._shipments.values())]
+        if moved:
+            _LOGGER.debug("%d Sendungen einem anderen Zielort zugeordnet", len(moved))
+            self.async_schedule_save()
+        return moved
 
     @callback
     def async_remove(self, shipment_id: str) -> bool:

@@ -50,6 +50,11 @@ MAX_EVENTS_PER_SHIPMENT: Final = 50
 # aber fuer die Zuordnung in Step 3.2 reichen die ersten.
 MAX_ITEMS_PER_SHIPMENT: Final = 20
 
+# Eingebauter Zielort fuer Sendungen, die keiner konfigurierten Adresse zuzuordnen
+# sind. Konfigurierte Zielorte duerfen diese ID nicht verwenden.
+DESTINATION_UNKNOWN: Final = "unknown"
+DESTINATION_UNKNOWN_NAME: Final = "Unbekannt"
+
 # IDs der Datenquellen (Werte landen in `SourceRecord.source_id`).
 SOURCE_IMAP: Final = "imap"
 SOURCE_SEVENTEENTRACK: Final = "seventeentrack"

@@ -219,7 +219,17 @@ class Shipment:
     delivered_at: datetime | None = None
     destination_id: str | None = None
     destination_raw: str | None = None
-    """Adresse so, wie sie in der Mail stand — Grundlage der Zuordnung in Step 1.5."""
+    """Adresse so, wie sie in der Mail stand — Grundlage der Zuordnung (`addresses`).
+
+    Bleibt auch erhalten, wenn keine Zuordnung gelingt: Aus ihr legt der Nutzer
+    im Options-Flow die fehlende Regel an.
+    """
+    recipient_emails: list[str] = field(default_factory=list)
+    """Empfaengeradressen der Mails zu dieser Sendung (`To`, `Delivered-To`, ...).
+
+    Gespeichert statt nur beim Mailempfang ausgewertet, weil die Zuordnung bei
+    jedem Durchlauf neu bewertet wird — dann ist die Mail laengst verarbeitet.
+    """
     sender: str | None = None
     description: str | None = None
     items: list[str] = field(default_factory=list)
@@ -303,6 +313,7 @@ class Shipment:
             "delivered_at": _dt_to_iso(self.delivered_at),
             "destination_id": self.destination_id,
             "destination_raw": self.destination_raw,
+            "recipient_emails": list(self.recipient_emails),
             "sender": self.sender,
             "description": self.description,
             "items": list(self.items),
@@ -331,6 +342,7 @@ class Shipment:
             delivered_at=_dt_from_iso(data.get("delivered_at"), field_name="delivered_at"),
             destination_id=data.get("destination_id"),
             destination_raw=data.get("destination_raw"),
+            recipient_emails=_str_list(data.get("recipient_emails")),
             sender=data.get("sender"),
             description=data.get("description"),
             items=_str_list(data.get("items")),
@@ -349,17 +361,25 @@ class Shipment:
 class Destination:
     """Ein manuell konfigurierter Zielort mit seinen Match-Regeln.
 
-    Die eigentliche Zuordnung Sendung -> Zielort entsteht in Step 1.5; hier steht
-    nur der Datencontainer inklusive Serialisierung.
+    Alle Regeln sind optional und kombinierbar; jede Liste darf mehrere
+    Schreibweisen oder Varianten enthalten. Ausgewertet werden sie in `addresses`.
     """
 
     id: str
     name: str
     recipient_names: list[str] = field(default_factory=list)
     streets: list[str] = field(default_factory=list)
+    """Strasse mit Hausnummer, z.B. „Musterstraße 1"."""
     postal_codes: list[str] = field(default_factory=list)
+    cities: list[str] = field(default_factory=list)
     packstations: list[str] = field(default_factory=list)
+    """Packstation- oder Filialnummer („123" oder „Packstation 123")."""
+    post_numbers: list[str] = field(default_factory=list)
+    """DHL-Postnummer — Packstation-Sendungen tragen sie statt einer Strasse."""
     emails: list[str] = field(default_factory=list)
+    """Empfaenger-Mailadressen; „@example.com" steht fuer die ganze Domain."""
+    keywords: list[str] = field(default_factory=list)
+    """Freie Schluesselwoerter, z.B. ein Firmenname in der Adresszeile."""
 
     def to_dict(self) -> dict[str, Any]:
         """Serialisieren."""
@@ -370,8 +390,11 @@ class Destination:
             "recipient_names": list(self.recipient_names),
             "streets": list(self.streets),
             "postal_codes": list(self.postal_codes),
+            "cities": list(self.cities),
             "packstations": list(self.packstations),
+            "post_numbers": list(self.post_numbers),
             "emails": list(self.emails),
+            "keywords": list(self.keywords),
         }
 
     @classmethod
@@ -384,6 +407,9 @@ class Destination:
             recipient_names=_str_list(data.get("recipient_names")),
             streets=_str_list(data.get("streets")),
             postal_codes=_str_list(data.get("postal_codes")),
+            cities=_str_list(data.get("cities")),
             packstations=_str_list(data.get("packstations")),
+            post_numbers=_str_list(data.get("post_numbers")),
             emails=_str_list(data.get("emails")),
+            keywords=_str_list(data.get("keywords")),
         )

@@ -95,7 +95,7 @@ ha-delivery-tracker/
 (normalisierter Enum: `unknown, ordered, label_created, in_transit, delayed, customs,
 out_for_delivery, ready_for_pickup, delivered, delivery_failed, returned`), `status_text`
 (Originaltext des Zustellers), `eta_start`/`eta_end`, `delivered_at`, `destination_id` +
-`destination_raw`, `sender`, `description`, `items`, `order_number`,
+`destination_raw` + `recipient_emails`, `sender`, `description`, `items`, `order_number`,
 `pickup_location`/`pickup_code`, `tracking_url`, `events`, `sources`, `first_seen`,
 `last_updated`.
 
