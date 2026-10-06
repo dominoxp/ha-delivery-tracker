@@ -9,7 +9,7 @@ from homeassistant.const import Platform
 DOMAIN: Final = "delivery_tracker"
 
 # Plattformen, die beim Entry-Setup geladen werden.
-PLATFORMS: Final[list[Platform]] = [Platform.SENSOR]
+PLATFORMS: Final[list[Platform]] = [Platform.CALENDAR, Platform.SENSOR]
 
 # Attribute der Sensoren. Beide sind vom Recorder ausgenommen (Step 2.3).
 ATTR_SHIPMENTS: Final = "shipments"

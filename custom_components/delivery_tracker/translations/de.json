@@ -204,6 +204,11 @@
     }
   },
   "entity": {
+    "calendar": {
+      "expected_deliveries": {
+        "name": "Erwartete Lieferungen"
+      }
+    },
     "sensor": {
       "active_shipments": {
         "name": "Aktive Sendungen"

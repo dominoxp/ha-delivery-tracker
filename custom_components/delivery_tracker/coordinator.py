@@ -58,6 +58,7 @@ from .const import (
     SUBENTRY_API_SOURCE,
     SUBENTRY_MAILBOX,
 )
+from .dates import local_day_range
 from .models import Destination, Shipment, ShipmentStatus
 from .pipeline import MailPipeline
 from .sources import (
@@ -238,8 +239,7 @@ class CoordinatorData:
         for shipment in self.active:
             if shipment.eta_start is None:
                 continue
-            start = dt_util.as_local(shipment.eta_start).date()
-            end = dt_util.as_local(shipment.eta_end or shipment.eta_start).date()
+            start, end = local_day_range(shipment.eta_start, shipment.eta_end)
             if start <= day <= end:
                 found.append(shipment)
         return found

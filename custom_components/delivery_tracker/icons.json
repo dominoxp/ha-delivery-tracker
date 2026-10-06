@@ -1,5 +1,10 @@
 {
   "entity": {
+    "calendar": {
+      "expected_deliveries": {
+        "default": "mdi:calendar-clock"
+      }
+    },
     "sensor": {
       "active_shipments": {
         "default": "mdi:package-variant-closed"

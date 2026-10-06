@@ -227,6 +227,34 @@ def parse_time_window(text: str) -> tuple[time, time] | None:
     return None
 
 
+def whole_local_days(start: datetime, end: datetime | None) -> tuple[date, date] | None:
+    """Erster Tag und Tag nach dem Ende, wenn das Fenster ganze lokale Tage umfasst.
+
+    So legt `parse_eta` einen Termin ohne Uhrzeit ab: von Mitternacht bis
+    Mitternacht in der HA-Zeitzone. Ein Fenster mit Uhrzeit ergibt `None`.
+    """
+    start_local = dt_util.as_local(start)
+    end_local = dt_util.as_local(end) if end is not None else None
+    if (
+        end_local is None
+        or end_local <= start_local
+        or start_local.time() != time.min
+        or end_local.time() != time.min
+    ):
+        return None
+    return start_local.date(), end_local.date()
+
+
+def local_day_range(start: datetime, end: datetime | None) -> tuple[date, date]:
+    """Erster und letzter lokaler Tag, die ein Fenster beruehrt (beide inklusive).
+
+    Ein Ganztagsfenster endet um Mitternacht des Folgetags — der gehoert nicht dazu.
+    """
+    if (days := whole_local_days(start, end)) is not None:
+        return days[0], days[1] - timedelta(days=1)
+    return dt_util.as_local(start).date(), dt_util.as_local(end or start).date()
+
+
 def parse_eta(text: str, *, now: datetime | None = None) -> tuple[datetime | None, datetime | None]:
     """Aus einem Textstueck das Lieferfenster als `(start, ende)` in UTC lesen.
 

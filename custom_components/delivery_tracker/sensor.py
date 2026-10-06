@@ -37,16 +37,15 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_track_time_change
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import ATTR_SHIPMENTS, ATTR_SOURCES, SUBENTRY_DESTINATION
 from .coordinator import CoordinatorData, DeliveryTrackerCoordinator, SourceState
+from .entity import DeliveryTrackerEntity
 from .entry import (
     DeliveryTrackerConfigEntry,
     destination_device_identifier,
     destination_from_subentry,
-    hub_device_identifier,
 )
 from .models import Destination, Shipment, ShipmentStatus
 
@@ -163,28 +162,8 @@ def _async_remove_stale_entities(
 
 
 # ----------------------------------------------------------------------
-# Basisklassen
+# Basisklasse
 # ----------------------------------------------------------------------
-
-
-class DeliveryTrackerEntity(CoordinatorEntity[DeliveryTrackerCoordinator]):
-    """Gemeinsame Basis: Name aus `translation_key`, Device des Hubs."""
-
-    _attr_has_entity_name = True
-    # Die Listen aendern sich mit jeder Sendung; sie gehoeren nicht in die
-    # Recorder-Datenbank. Die Historie steckt im Zaehlerwert.
-    _unrecorded_attributes = frozenset({ATTR_SHIPMENTS, ATTR_SOURCES})
-
-    def __init__(self, coordinator: DeliveryTrackerCoordinator, key: str) -> None:
-        """Entity am Haupt-Device anlegen."""
-        super().__init__(coordinator)
-        entry = coordinator.config_entry
-        self._attr_unique_id = f"{entry.entry_id}_{key}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={hub_device_identifier(entry)},
-            name=entry.title,
-            entry_type=DeviceEntryType.SERVICE,
-        )
 
 
 class ShipmentListSensor(DeliveryTrackerEntity, SensorEntity):

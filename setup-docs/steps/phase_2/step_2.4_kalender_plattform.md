@@ -49,9 +49,9 @@ Automationen verwenden — ohne eine einzige Zeile Template.
 
 ## Checkliste
 
-- [ ] calendar.py mit erwartete_lieferungen
-- [ ] Zeitfenster- und Ganztags-Abbildung inklusive Zeitzonen
-- [ ] Titel, Beschreibung und location nach festem Muster
-- [ ] Zeitraum-Abfrage für die Kalender-Karte und get_events
-- [ ] Stabile Ereignis-IDs
-- [ ] Übersetzungen, Tests grün
+- [x] calendar.py mit erwartete_lieferungen
+- [x] Zeitfenster- und Ganztags-Abbildung inklusive Zeitzonen
+- [x] Titel, Beschreibung und location nach festem Muster
+- [x] Zeitraum-Abfrage für die Kalender-Karte und get_events
+- [x] Stabile Ereignis-IDs
+- [x] Übersetzungen, Tests grün
