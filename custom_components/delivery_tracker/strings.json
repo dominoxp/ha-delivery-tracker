@@ -203,6 +203,47 @@
       }
     }
   },
+  "entity": {
+    "sensor": {
+      "active_shipments": {
+        "name": "Aktive Sendungen"
+      },
+      "expected_today": {
+        "name": "Heute erwartet"
+      },
+      "out_for_delivery": {
+        "name": "In Zustellung"
+      },
+      "ready_for_pickup": {
+        "name": "Abholbereit"
+      },
+      "delivered_today": {
+        "name": "Heute zugestellt"
+      },
+      "problems": {
+        "name": "Probleme"
+      },
+      "carrier": {
+        "name": "{carrier}"
+      },
+      "destination": {
+        "name": "Aktive Sendungen"
+      },
+      "last_update": {
+        "name": "Letzte Aktualisierung"
+      },
+      "sources": {
+        "name": "Quellen",
+        "state": {
+          "pending": "Ausstehend",
+          "ok": "OK",
+          "error": "Fehler",
+          "auth_failed": "Anmeldung abgelehnt",
+          "failed": "Ausgefallen"
+        }
+      }
+    }
+  },
   "selector": {
     "security": {
       "options": {

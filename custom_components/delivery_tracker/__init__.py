@@ -66,7 +66,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: DeliveryTrackerConfigEnt
         hass, entry, store=store, registry=registry, destinations=destinations
     )
     entry.runtime_data = DeliveryTrackerData(
-        store=store, coordinator=coordinator, options=options, destinations=destinations
+        store=store,
+        coordinator=coordinator,
+        options=options,
+        registry=registry,
+        destinations=destinations,
     )
 
     # Ein eigener Listener haelt den Takt des Coordinators am Laufen, auch bevor

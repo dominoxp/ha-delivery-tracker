@@ -38,6 +38,38 @@ nie verschwinden, und eine Attributliste, die sich direkt in Karten einsetzen l�
 - Zeitbezogene Zähler („heute") müssen zum Tageswechsel aktualisieren, auch ohne neue Mail.
 - Sortierung im Attribut festlegen und dokumentieren — die Karte in 4.2 verlässt sich darauf.
 
+## Nachtrag aus der Umsetzung (Oktober 2026)
+
+- **Keys englisch:** Die `translation_key`s/`unique_id`-Suffixe folgen der Regel „Identifier
+  Englisch": `active_shipments`, `expected_today`, `out_for_delivery`, `ready_for_pickup`,
+  `delivered_today`, `problems`. Die deutschen Namen kommen aus `de.json`. Entity-IDs bildet HA
+  aus der englischen Übersetzung (`sensor.delivery_tracker_active_shipments`).
+- **unique_ids:** `{entry_id}_{key}`, `{entry_id}_carrier_{carrier_id}`,
+  `{entry_id}_destination_{destination.id}`, `{entry_id}_last_update`, `{entry_id}_sources`.
+  Die Zielort-ID stammt aus dem Subentry und bleibt beim Umbenennen gleich.
+- **Devices:** Haupt-Device `(DOMAIN, entry_id)` (`entry.hub_device_identifier`), Zielort-Sensoren
+  über `config_subentry_id` am Device des Zielorts. Wird ein Subentry gelöscht, räumt HA Device und
+  Sensor ab.
+- **Carrier-Sensoren:** je Plugin der gefilterten Registry (neu in `runtime_data.registry`), also
+  auch `generic`, solange der Fallback an ist. Name = Plugin-Name über den Platzhalter `{carrier}`.
+  Beim Setup entfernt `_async_remove_stale_entities` Hub-Sensoren aus der Registry, die es nicht
+  mehr gibt. Ein abgewählter Carrier verschwindet dadurch, statt als „nicht verfügbar"
+  stehen zu bleiben.
+- **Attribut `shipments`:** `as_summary()` je Sendung. Die Sortierung ist `shipment_sort_key` aus
+  2.2: mit Termin nach `eta_start` aufsteigend, danach ohne Termin nach `last_updated`
+  absteigend, ID als Tiebreak. `_unrecorded_attributes` der Basisklasse nimmt `shipments` und
+  `sources` aus.
+- **Diagnose:** `last_update` (Timestamp = `CoordinatorData.updated_at`), `sources` (ENUM mit
+  den `SourceState`-Werten, Zustand = schlechteste Quelle, ohne Quellen `unknown`; Attribut
+  `sources` mit `SourceStatus.as_dict()` je Quelle).
+- **Tageswechsel:** `expected_today` und `delivered_today` hängen an `async_track_time_change`
+  um 00:00:00 Ortszeit und schreiben ihren Zustand neu. Der Tag wird bei jedem Schreiben aus
+  `dt_util.now()` bestimmt.
+- **Icons** in `icons.json`, inklusive Zustands-Icons für den Quellen-Sensor.
+- **Recorder-Test** liegt in `tests/test_sensor_recorder.py`: Der Recorder braucht seine DB vor
+  `hass`, das autouse-Fixture aus `conftest.py` zieht `hass` aber vorher. Das Modul überschreibt
+  das Fixture deshalb mit `recorder_db_url` als erster Abhängigkeit.
+
 ## Akzeptanzkriterien
 
 - Mit Testdaten stehen alle Zähler auf den erwarteten Werten.
@@ -52,11 +84,11 @@ nie verschwinden, und eine Attributliste, die sich direkt in Karten einsetzen l�
 
 ## Checkliste
 
-- [ ] Sechs Zähler-Sensoren am Haupt-Device
-- [ ] Sensor je Carrier und je Zieladresse (an deren Device)
-- [ ] Diagnose-Sensoren für Aktualisierung und Verbindungszustand
-- [ ] shipments-Attribut aus as_summary(), definiert sortiert
-- [ ] _unrecorded_attributes gesetzt und getestet
-- [ ] Stabile unique_ids über Reload und Umbenennung
-- [ ] Aktualisierung zum Tageswechsel
-- [ ] Übersetzungen de/en, Tests grün
+- [x] Sechs Zähler-Sensoren am Haupt-Device
+- [x] Sensor je Carrier und je Zieladresse (an deren Device)
+- [x] Diagnose-Sensoren für Aktualisierung und Verbindungszustand
+- [x] shipments-Attribut aus as_summary(), definiert sortiert
+- [x] _unrecorded_attributes gesetzt und getestet
+- [x] Stabile unique_ids über Reload und Umbenennung
+- [x] Aktualisierung zum Tageswechsel
+- [x] Übersetzungen de/en, Tests grün

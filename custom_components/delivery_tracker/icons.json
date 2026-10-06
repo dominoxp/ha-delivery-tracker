@@ -1,0 +1,43 @@
+{
+  "entity": {
+    "sensor": {
+      "active_shipments": {
+        "default": "mdi:package-variant-closed"
+      },
+      "expected_today": {
+        "default": "mdi:calendar-today"
+      },
+      "out_for_delivery": {
+        "default": "mdi:truck-delivery"
+      },
+      "ready_for_pickup": {
+        "default": "mdi:store-marker"
+      },
+      "delivered_today": {
+        "default": "mdi:package-variant-closed-check"
+      },
+      "problems": {
+        "default": "mdi:package-variant-closed-remove"
+      },
+      "carrier": {
+        "default": "mdi:truck-fast"
+      },
+      "destination": {
+        "default": "mdi:home-import-outline"
+      },
+      "last_update": {
+        "default": "mdi:update"
+      },
+      "sources": {
+        "default": "mdi:email-sync",
+        "state": {
+          "pending": "mdi:email-clock",
+          "ok": "mdi:email-check",
+          "error": "mdi:email-alert",
+          "auth_failed": "mdi:email-lock",
+          "failed": "mdi:email-remove"
+        }
+      }
+    }
+  }
+}

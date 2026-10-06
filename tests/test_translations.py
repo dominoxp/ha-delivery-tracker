@@ -7,13 +7,14 @@ from typing import Any
 
 import pytest
 
-from custom_components.delivery_tracker import config_flow
+from custom_components.delivery_tracker import config_flow, sensor
 from custom_components.delivery_tracker.const import (
     CONF_DESTINATION_RULES,
     SUBENTRY_API_SOURCE,
     SUBENTRY_DESTINATION,
     SUBENTRY_MAILBOX,
 )
+from custom_components.delivery_tracker.coordinator import SourceState
 
 COMPONENT = Path(__file__).parent.parent / "custom_components" / "delivery_tracker"
 LANGUAGES = ("de", "en")
@@ -99,3 +100,23 @@ def test_flow_keys_exist_in_strings() -> None:
     ]
 
     assert [key for key in expected if key not in STRINGS] == []
+
+
+SENSOR_KEYS = [
+    *(description.translation_key for description in sensor.COUNTERS),
+    # HA macht aus `_attr_translation_key` eine Property; an der Klasse ist der Wert nicht lesbar.
+    "carrier",
+    "destination",
+    "last_update",
+    "sources",
+]
+
+
+def test_sensor_keys_exist_in_strings_and_icons() -> None:
+    """Jeder Sensor hat Namen und Icon, der Quellen-Sensor einen Text je Zustand."""
+    icons = _flatten(_load(COMPONENT / "icons.json"))
+    expected = [f"entity.sensor.{key}.name" for key in SENSOR_KEYS]
+    expected += [f"entity.sensor.sources.state.{state.value}" for state in SourceState]
+
+    assert [key for key in expected if key not in STRINGS] == []
+    assert [key for key in SENSOR_KEYS if f"entity.sensor.{key}.default" not in icons] == []

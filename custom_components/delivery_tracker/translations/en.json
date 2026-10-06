@@ -203,6 +203,47 @@
       }
     }
   },
+  "entity": {
+    "sensor": {
+      "active_shipments": {
+        "name": "Active shipments"
+      },
+      "expected_today": {
+        "name": "Expected today"
+      },
+      "out_for_delivery": {
+        "name": "Out for delivery"
+      },
+      "ready_for_pickup": {
+        "name": "Ready for pickup"
+      },
+      "delivered_today": {
+        "name": "Delivered today"
+      },
+      "problems": {
+        "name": "Problems"
+      },
+      "carrier": {
+        "name": "{carrier}"
+      },
+      "destination": {
+        "name": "Active shipments"
+      },
+      "last_update": {
+        "name": "Last update"
+      },
+      "sources": {
+        "name": "Sources",
+        "state": {
+          "pending": "Pending",
+          "ok": "OK",
+          "error": "Error",
+          "auth_failed": "Sign-in rejected",
+          "failed": "Failed"
+        }
+      }
+    }
+  },
   "selector": {
     "security": {
       "options": {

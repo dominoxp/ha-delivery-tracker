@@ -40,6 +40,8 @@ class DeliveryTrackerData:
     store: ShipmentStore
     coordinator: DeliveryTrackerCoordinator
     options: GlobalOptions
+    registry: CarrierRegistry
+    """Nur die aktiven Carrier-Plugins — je Plugin gibt es einen Sensor."""
     destinations: list[Destination] = field(default_factory=list)
 
     @property
@@ -109,6 +111,11 @@ def mailbox_configs_from_entry(entry: ConfigEntry) -> dict[str, ImapConfig]:
         subentry.subentry_id: ImapConfig.from_mapping(subentry.data)
         for subentry in entry.get_subentries_of_type(SUBENTRY_MAILBOX)
     }
+
+
+def hub_device_identifier(entry: ConfigEntry) -> tuple[str, str]:
+    """Device-Identifier des Haupt-Devices, an dem die Zaehler haengen."""
+    return (DOMAIN, entry.entry_id)
 
 
 def destination_device_identifier(entry: ConfigEntry, destination_id: str) -> tuple[str, str]:

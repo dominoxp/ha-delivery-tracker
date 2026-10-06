@@ -8,8 +8,12 @@ from homeassistant.const import Platform
 
 DOMAIN: Final = "delivery_tracker"
 
-# Plattformen, die beim Entry-Setup geladen werden. Wird ab Phase 2 gefuellt.
-PLATFORMS: Final[list[Platform]] = []
+# Plattformen, die beim Entry-Setup geladen werden.
+PLATFORMS: Final[list[Platform]] = [Platform.SENSOR]
+
+# Attribute der Sensoren. Beide sind vom Recorder ausgenommen (Step 2.3).
+ATTR_SHIPMENTS: Final = "shipments"
+ATTR_SOURCES: Final = "sources"
 
 # Schluessel und Version des Storage-Files unter .storage/.
 STORAGE_KEY: Final = f"{DOMAIN}.shipments"
