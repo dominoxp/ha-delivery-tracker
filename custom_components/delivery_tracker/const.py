@@ -164,6 +164,13 @@ ATTR_SUBJECT: Final = "subject"
 ATTR_SENDER: Final = "sender"
 ATTR_BODY: Final = "body"
 
+# Repairs (Step 2.6): nur fuer Fehler, die der Nutzer selbst beheben muss.
+# Die Werte sind zugleich die Uebersetzungsschluessel unter `issues`.
+ISSUE_MAILBOX_AUTH_FAILED: Final = "mailbox_auth_failed"
+ISSUE_MAILBOX_FOLDER_NOT_FOUND: Final = "mailbox_folder_not_found"
+ISSUE_API_KEY_INVALID: Final = "api_key_invalid"
+ISSUE_API_QUOTA_EXHAUSTED: Final = "api_quota_exhausted"
+
 # Events auf dem HA-Bus. Sie feuern nur bei echten Aenderungen.
 EVENT_SHIPMENT_ADDED: Final = f"{DOMAIN}_shipment_added"
 EVENT_SHIPMENT_UPDATED: Final = f"{DOMAIN}_shipment_updated"

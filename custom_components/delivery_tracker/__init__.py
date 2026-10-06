@@ -40,6 +40,7 @@ from .entry import (
     destinations_from_entry,
 )
 from .events import async_fire_events_listener
+from .issues import async_clear_issues
 from .services import async_setup_services
 from .store import ShipmentStore
 
@@ -119,6 +120,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: DeliveryTrackerConfigEn
         await data.coordinator.async_shutdown()
         await data.store.async_save()
     return unloaded
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: DeliveryTrackerConfigEntry) -> None:
+    """Beim Loeschen des Entries seine Repairs-Eintraege mitnehmen."""
+    async_clear_issues(hass, entry)
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: DeliveryTrackerConfigEntry) -> None:

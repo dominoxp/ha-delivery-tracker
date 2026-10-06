@@ -427,5 +427,23 @@
     "ambiguous_tracking_number": {
       "message": "{tracking_number} matches several carriers ({carriers}). Please specify the carrier."
     }
+  },
+  "issues": {
+    "mailbox_auth_failed": {
+      "title": "Login to mailbox {source} rejected",
+      "description": "The mail server rejects the username or password for {source}. The mailbox is no longer checked until the credentials are correct.\n\nGo to **Settings → Devices & services → Delivery Tracker**, open the menu of the mailbox {source}, choose **Reconfigure** and enter the current password. Providers that require two-factor sign-in need an app password.\n\nThis notice disappears as soon as the mailbox has been checked successfully again."
+    },
+    "mailbox_folder_not_found": {
+      "title": "Folder in mailbox {source} is missing",
+      "description": "The configured folder of {source} no longer exists or cannot be opened, for example because it was renamed. The mailbox is no longer checked.\n\nGo to **Settings → Devices & services → Delivery Tracker**, open the menu of the mailbox {source}, choose **Reconfigure** and select the folder again.\n\nThis notice disappears as soon as the mailbox has been checked successfully again."
+    },
+    "api_key_invalid": {
+      "title": "API key for {source} is invalid",
+      "description": "{source} rejects the API key; it has probably expired or been revoked. The source is no longer queried.\n\nGo to **Settings → Devices & services → Delivery Tracker**, open the menu of the API source {source}, choose **Reconfigure** and enter a valid key.\n\nThis notice disappears as soon as the source has been queried successfully again."
+    },
+    "api_quota_exhausted": {
+      "title": "Quota of {source} used up",
+      "description": "The request quota of the API key for {source} is used up. The source is paused so the quota is not strained further; emails are still processed.\n\nGo to **Settings → Devices & services → Delivery Tracker**, open the menu of the API source {source}, choose **Reconfigure** and either enter a different key or choose a longer polling interval. The source is queried again after saving.\n\nThis notice disappears as soon as the source has been queried successfully again."
+    }
   }
 }

@@ -18,7 +18,9 @@ Sicherheitsnetz, falls ein Push-Signal verloren geht.
 Fehler bleiben bei ihrer Quelle: Jede Quelle hat einen eigenen Zustand
 (`SourceState`) und ihren letzten Fehler, die Ergebnisse der anderen kommen
 trotzdem an. Dauerhafte Fehler (falsche Zugangsdaten, fehlender Ordner) werden
-nicht wiederholt — bei Zugangsdaten startet stattdessen der Reauth-Flow.
+nicht wiederholt — bei Zugangsdaten startet stattdessen der Reauth-Flow. Was
+der Nutzer selbst beheben muss, bekommt ausserdem einen Repairs-Eintrag
+(`issues`), der mit dem naechsten erfolgreichen Abruf wieder verschwindet.
 
 Warum dafuer kein `ConfigEntryAuthFailed` aus `_async_update_data`: HA wertet
 die Exception als Fehlschlag des *ganzen* Coordinators — alle Entities werden
@@ -52,6 +54,10 @@ from .const import (
     DEFAULT_API_SCAN_INTERVAL,
     DESTINATION_UNKNOWN,
     DOMAIN,
+    ISSUE_API_KEY_INVALID,
+    ISSUE_API_QUOTA_EXHAUSTED,
+    ISSUE_MAILBOX_AUTH_FAILED,
+    ISSUE_MAILBOX_FOLDER_NOT_FOUND,
     REAUTH_SUBENTRY_ID,
     SOURCE_FETCH_TIMEOUT,
     SOURCE_IMAP,
@@ -60,16 +66,19 @@ from .const import (
     SUBENTRY_MAILBOX,
 )
 from .dates import local_day_range
+from .issues import async_sync_source_issues
 from .merge import merge_events, merge_sources
 from .models import Destination, Shipment, ShipmentEvent, ShipmentStatus, SourceRecord
 from .pipeline import MailPipeline
 from .sources import (
     API_SOURCE_FACTORIES,
     ImapConfig,
+    ImapFolderError,
     ImapProgress,
     ImapSource,
     SourceAuthError,
     SourcePermanentError,
+    SourceQuotaError,
     TrackingSource,
 )
 from .store import ShipmentStore
@@ -155,6 +164,17 @@ class SourceHandle:
     last_success: datetime | None = None
     last_fetch: datetime | None = None
     failures: int = 0
+    issue: str | None = None
+    """Repairs-Eintrag (`ISSUE_*`), solange die Quelle an einem behebbaren Fehler ruht."""
+
+    @property
+    def settled(self) -> bool:
+        """True, wenn der Ausgang des letzten Abrufs feststeht.
+
+        Ausstehend oder voruebergehend gestoert heisst: Ob ein frueherer
+        dauerhafter Fehler behoben ist, weiss noch niemand.
+        """
+        return self.state not in (SourceState.PENDING, SourceState.ERROR)
 
     def is_due(self, now: datetime) -> bool:
         """True, wenn die Quelle in diesem Durchlauf abgerufen werden soll."""
@@ -189,6 +209,15 @@ class StatusChange:
     """`None` bei einer neu aufgetauchten Sendung."""
     current: ShipmentStatus
     shipment: Shipment
+
+
+def _permanent_issue(err: SourcePermanentError) -> str | None:
+    """Repairs-Eintrag fuer einen dauerhaften Fehler, falls der Nutzer ihn beheben kann."""
+    if isinstance(err, ImapFolderError):
+        return ISSUE_MAILBOX_FOLDER_NOT_FOUND
+    if isinstance(err, SourceQuotaError):
+        return ISSUE_API_QUOTA_EXHAUSTED
+    return None
 
 
 def shipment_sort_key(shipment: Shipment) -> tuple[Any, ...]:
@@ -479,6 +508,7 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
             self.store.async_assign_destinations(self._matcher)
             removed = self.store.async_purge(now=now)
             self._async_persist_progress()
+            async_sync_source_issues(self.hass, self.config_entry, self.sources)
             return self._build_data(now, changes, removed)
 
     @callback
@@ -581,11 +611,17 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 shipments = await source.async_fetch()
         except SourceAuthError as err:
             self._mark_failed(handle, SourceState.AUTH_FAILED, str(err))
+            handle.issue = (
+                ISSUE_MAILBOX_AUTH_FAILED
+                if handle.kind == SUBENTRY_MAILBOX
+                else ISSUE_API_KEY_INVALID
+            )
             _LOGGER.error("%s: Zugangsdaten abgelehnt — bitte neu anmelden", handle.title)
             self.config_entry.async_start_reauth(self.hass, data={REAUTH_SUBENTRY_ID: handle.key})
             return []
         except SourcePermanentError as err:
             self._mark_failed(handle, SourceState.FAILED, str(err))
+            handle.issue = _permanent_issue(err)
             _LOGGER.error("%s: %s — die Quelle ruht bis zur Korrektur", handle.title, err)
             return []
         except Exception as err:
@@ -599,6 +635,7 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
         if handle.state is SourceState.ERROR:
             _LOGGER.info("%s: Abruf funktioniert wieder", handle.title)
         handle.state = SourceState.OK
+        handle.issue = None
         handle.failures = 0
         handle.last_success = now
         return shipments

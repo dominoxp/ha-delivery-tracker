@@ -1,4 +1,9 @@
-"""Die Uebersetzungsdateien passen zu `strings.json` und zum Config-Flow."""
+"""Die Uebersetzungsdateien passen zu `strings.json` und zum Code.
+
+Der Abgleich ist die Absicherung gegen die haeufigste Fehlerklasse in
+HA-Integrationen: ein Schluessel, der nur in einer Sprache fehlt, zeigt in der
+Oberflaeche den rohen Schluessel statt eines Textes. Er bleibt fest im Repo.
+"""
 
 import json
 import re
@@ -6,8 +11,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
-from custom_components.delivery_tracker import config_flow, sensor
+from custom_components.delivery_tracker import config_flow, const, sensor, services
 from custom_components.delivery_tracker.const import (
     CONF_DESTINATION_RULES,
     SUBENTRY_API_SOURCE,
@@ -37,16 +43,36 @@ def _flatten(data: dict[str, Any], prefix: str = "") -> dict[str, str]:
     return flat
 
 
+def _key_diff(
+    reference: dict[str, Any], translation: dict[str, Any]
+) -> tuple[list[str], list[str]]:
+    """Fehlende und ueberzaehlige Schluessel einer Uebersetzung gegenueber `strings.json`."""
+    expected, actual = set(_flatten(reference)), set(_flatten(translation))
+    return sorted(expected - actual), sorted(actual - expected)
+
+
 STRINGS = _flatten(_load(COMPONENT / "strings.json"))
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_translation_has_same_keys_as_strings(language: str) -> None:
     """Jeder Schluessel aus `strings.json` existiert in der Uebersetzung und umgekehrt."""
-    translation = _flatten(_load(COMPONENT / "translations" / f"{language}.json"))
+    translation = _load(COMPONENT / "translations" / f"{language}.json")
 
-    assert sorted(set(STRINGS) - set(translation)) == []
-    assert sorted(set(translation) - set(STRINGS)) == []
+    assert _key_diff(_load(COMPONENT / "strings.json"), translation) == ([], [])
+
+
+def test_abgleich_findet_entfernten_und_zusaetzlichen_schluessel() -> None:
+    """Gegenprobe: Der Abgleich schlaegt bei einer Abweichung tatsaechlich an."""
+    reference = _load(COMPONENT / "strings.json")
+    translation = _load(COMPONENT / "translations" / "en.json")
+    del translation["issues"]["mailbox_auth_failed"]["title"]
+    translation["entity"]["sensor"]["problems"]["extra"] = "Extra"
+
+    assert _key_diff(reference, translation) == (
+        ["issues.mailbox_auth_failed.title"],
+        ["entity.sensor.problems.extra"],
+    )
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
@@ -120,3 +146,34 @@ def test_sensor_keys_exist_in_strings_and_icons() -> None:
 
     assert [key for key in expected if key not in STRINGS] == []
     assert [key for key in SENSOR_KEYS if f"entity.sensor.{key}.default" not in icons] == []
+
+
+def test_repairs_haben_titel_und_beschreibung() -> None:
+    """Jeder Repairs-Eintrag aus `const.ISSUE_*` hat Titel und Text mit der Quelle."""
+    issues = [value for name, value in vars(const).items() if name.startswith("ISSUE_")]
+    assert len(issues) == 4
+
+    for issue in issues:
+        for part in ("title", "description"):
+            key = f"issues.{issue}.{part}"
+            assert key in STRINGS, key
+            assert "{source}" in STRINGS[key], key
+
+
+def test_actions_und_fehlermeldungen_haben_texte() -> None:
+    """Jede Action und jedes Feld aus `services.yaml`, jeder Fehler der Actions."""
+    actions = yaml.safe_load((COMPONENT / "services.yaml").read_text(encoding="utf-8"))
+    expected = [
+        f"services.{action}.{part}" for action in actions for part in ("name", "description")
+    ]
+    expected += [
+        f"services.{action}.fields.{field}.{part}"
+        for action, spec in actions.items()
+        for field in (spec or {}).get("fields", {})
+        for part in ("name", "description")
+    ]
+    errors = [value for name, value in vars(services).items() if name.startswith("ERROR_")]
+    assert errors
+    expected += [f"exceptions.{error}.message" for error in errors]
+
+    assert [key for key in expected if key not in STRINGS] == []

@@ -29,6 +29,14 @@ class SourceAuthError(SourcePermanentError):
     """Zugangsdaten oder API-Schluessel werden abgelehnt; fuehrt zum Reauth-Hinweis."""
 
 
+class SourceQuotaError(SourcePermanentError):
+    """Das Kontingent des API-Schluessels ist aufgebraucht.
+
+    Dauerhaft, weil ein erneuter Versuch es nur weiter belastet; die Quelle ruht
+    bis zu einem neuen Schluessel oder dem naechsten Reload.
+    """
+
+
 class TrackingSource(ABC):
     """Basisklasse fuer E-Mail-, API- und kuenftige Quellen."""
 

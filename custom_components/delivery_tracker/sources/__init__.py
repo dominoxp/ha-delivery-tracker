@@ -13,6 +13,7 @@ from .base import (
     SourceAuthError,
     SourceError,
     SourcePermanentError,
+    SourceQuotaError,
     TrackingSource,
 )
 from .imap_source import (
@@ -52,5 +53,6 @@ __all__ = [
     "SourceAuthError",
     "SourceError",
     "SourcePermanentError",
+    "SourceQuotaError",
     "TrackingSource",
 ]

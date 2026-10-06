@@ -54,10 +54,10 @@ vollständig übersetzt — der Stand, ab dem sie sinnvoll benutzbar ist.
 
 ## Checkliste
 
-- [ ] diagnostics.py mit allen Abschnitten
-- [ ] Maskierung aller personenbezogenen und geheimen Werte
-- [ ] Repairs für Anmeldung, Ordner und API-Schlüssel
-- [ ] Kennzahlen für verworfene Mails und fehlende Adresszuordnung
-- [ ] strings.json, de.json, en.json vollständig
-- [ ] Übersetzungs-Abgleichtest
+- [x] diagnostics.py mit allen Abschnitten
+- [x] Maskierung aller personenbezogenen und geheimen Werte
+- [x] Repairs für Anmeldung, Ordner und API-Schlüssel
+- [x] Kennzahlen für verworfene Mails und fehlende Adresszuordnung
+- [x] strings.json, de.json, en.json vollständig
+- [x] Übersetzungs-Abgleichtest
 - [ ] Tests grün, manuell in echter HA-Instanz geprüft

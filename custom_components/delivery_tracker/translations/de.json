@@ -427,5 +427,23 @@
     "ambiguous_tracking_number": {
       "message": "{tracking_number} passt zu mehreren Zustellern ({carriers}). Bitte den Zusteller angeben."
     }
+  },
+  "issues": {
+    "mailbox_auth_failed": {
+      "title": "Anmeldung am Postfach {source} abgelehnt",
+      "description": "Der Mailserver lehnt Benutzername oder Passwort für {source} ab. Das Postfach wird nicht mehr abgerufen, bis die Zugangsdaten stimmen.\n\nUnter **Einstellungen → Geräte & Dienste → Delivery Tracker** beim Postfach {source} im Menü **Neu konfigurieren** wählen und das aktuelle Passwort eingeben. Ein App-Passwort ist nötig, wenn der Anbieter Zwei-Faktor-Anmeldung verlangt.\n\nDieser Hinweis verschwindet, sobald das Postfach wieder abgerufen wurde."
+    },
+    "mailbox_folder_not_found": {
+      "title": "Ordner im Postfach {source} fehlt",
+      "description": "Der eingestellte Ordner von {source} existiert nicht mehr oder lässt sich nicht öffnen, etwa weil er umbenannt wurde. Das Postfach wird nicht mehr abgerufen.\n\nUnter **Einstellungen → Geräte & Dienste → Delivery Tracker** beim Postfach {source} im Menü **Neu konfigurieren** wählen und den Ordner neu auswählen.\n\nDieser Hinweis verschwindet, sobald das Postfach wieder abgerufen wurde."
+    },
+    "api_key_invalid": {
+      "title": "API-Schlüssel für {source} ungültig",
+      "description": "{source} lehnt den API-Schlüssel ab, vermutlich ist er abgelaufen oder wurde widerrufen. Die Quelle wird nicht mehr abgefragt.\n\nUnter **Einstellungen → Geräte & Dienste → Delivery Tracker** bei der API-Quelle {source} im Menü **Neu konfigurieren** wählen und einen gültigen Schlüssel eingeben.\n\nDieser Hinweis verschwindet, sobald die Quelle wieder abgefragt wurde."
+    },
+    "api_quota_exhausted": {
+      "title": "Kontingent von {source} aufgebraucht",
+      "description": "Das Abfragekontingent des API-Schlüssels für {source} ist aufgebraucht. Die Quelle ruht, damit es nicht weiter belastet wird; Mails werden weiterhin ausgewertet.\n\nEntweder unter **Einstellungen → Geräte & Dienste → Delivery Tracker** bei der API-Quelle {source} im Menü **Neu konfigurieren** einen anderen Schlüssel eingeben oder ein größeres Abfrageintervall wählen. Nach dem Speichern wird die Quelle wieder abgefragt.\n\nDieser Hinweis verschwindet, sobald die Quelle wieder abgefragt wurde."
+    }
   }
 }
