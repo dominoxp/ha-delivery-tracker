@@ -82,6 +82,20 @@ def test_flow_keys_exist_in_strings() -> None:
             for rule in CONF_DESTINATION_RULES
         ),
         "config.abort.single_instance_allowed",
+        f"config.abort.{config_flow.ABORT_REAUTH_SUCCESSFUL}",
+        f"config.abort.{config_flow.ABORT_REAUTH_UNKNOWN_SOURCE}",
+        "config.step.reauth_confirm.data.password",
+        "config.step.reauth_confirm.data.api_key",
+        *(
+            f"config.error.{error}"
+            for error in (
+                config_flow.ERROR_CANNOT_CONNECT,
+                config_flow.ERROR_INVALID_AUTH,
+                config_flow.ERROR_FOLDER_NOT_FOUND,
+                config_flow.ERROR_INVALID_API_KEY,
+                config_flow.ERROR_UNKNOWN,
+            )
+        ),
     ]
 
     assert [key for key in expected if key not in STRINGS] == []

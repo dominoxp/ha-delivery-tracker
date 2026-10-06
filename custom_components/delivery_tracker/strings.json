@@ -7,10 +7,27 @@
         "data": {
           "name": "Name"
         }
+      },
+      "reauth_confirm": {
+        "title": "Neu anmelden",
+        "description": "Die Zugangsdaten für {source} wurden abgelehnt. Bitte das aktuelle Passwort bzw. den API-Schlüssel eingeben.",
+        "data": {
+          "password": "Passwort",
+          "api_key": "API-Schlüssel"
+        }
       }
     },
+    "error": {
+      "cannot_connect": "Der Server ist nicht erreichbar.",
+      "invalid_auth": "Benutzername oder Passwort sind falsch.",
+      "folder_not_found": "Der Ordner existiert nicht oder lässt sich nicht öffnen.",
+      "invalid_api_key": "Der API-Schlüssel ist ungültig.",
+      "unknown": "Unerwarteter Fehler, Details stehen im Log."
+    },
     "abort": {
-      "single_instance_allowed": "Es ist bereits eine Instanz von Delivery Tracker eingerichtet."
+      "single_instance_allowed": "Es ist bereits eine Instanz von Delivery Tracker eingerichtet.",
+      "reauth_successful": "Die Anmeldung war erfolgreich.",
+      "reauth_unknown_source": "Die betroffene Quelle existiert nicht mehr."
     }
   },
   "config_subentries": {

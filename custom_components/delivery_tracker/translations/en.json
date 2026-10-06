@@ -7,10 +7,27 @@
         "data": {
           "name": "Name"
         }
+      },
+      "reauth_confirm": {
+        "title": "Sign in again",
+        "description": "The credentials for {source} were rejected. Please enter the current password or API key.",
+        "data": {
+          "password": "Password",
+          "api_key": "API key"
+        }
       }
     },
+    "error": {
+      "cannot_connect": "The server cannot be reached.",
+      "invalid_auth": "Username or password is wrong.",
+      "folder_not_found": "The folder does not exist or cannot be opened.",
+      "invalid_api_key": "The API key is invalid.",
+      "unknown": "Unexpected error, see the log for details."
+    },
     "abort": {
-      "single_instance_allowed": "Delivery Tracker is already set up."
+      "single_instance_allowed": "Delivery Tracker is already set up.",
+      "reauth_successful": "Signed in successfully.",
+      "reauth_unknown_source": "The affected source no longer exists."
     }
   },
   "config_subentries": {

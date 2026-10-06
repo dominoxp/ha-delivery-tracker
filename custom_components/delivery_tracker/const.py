@@ -77,6 +77,14 @@ DEFAULT_RETENTION_DAYS: Final = 14
 DEFAULT_STALE_DAYS: Final = 60
 DEFAULT_GENERIC_FALLBACK: Final = True
 DEFAULT_API_SCAN_INTERVAL: Final = 3600
+# Grundtakt des Coordinators: Retention, Zustand der Quellen und der Puffer der
+# Postfaecher, falls ein Push-Signal verloren ging. Neue Mails melden sich selbst.
+COORDINATOR_UPDATE_INTERVAL: Final = 300
+# Obergrenze fuer einen einzelnen Abruf — eine haengende Quelle darf die Runde
+# der anderen nicht aufhalten.
+SOURCE_FETCH_TIMEOUT: Final = 120.0
+# Schluessel in den Reauth-Daten: welcher Subentry neue Zugangsdaten braucht.
+REAUTH_SUBENTRY_ID: Final = "subentry_id"
 # Obergrenze fuer den Verbindungstest im Config-Flow — ein nicht erreichbarer
 # Server darf den Dialog nicht haengen lassen.
 CONNECTION_TEST_TIMEOUT: Final = 20.0

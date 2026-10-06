@@ -187,8 +187,10 @@ class FakeImapServer:
         self.drop_connections()
         if self._server is not None:
             self._server.close()
+            # `wait_closed` wartet auch auf alle Verbindungen; ein Client, der
+            # gerade neu verbindet, darf das Testende nicht blockieren.
             with contextlib.suppress(Exception):
-                await self._server.wait_closed()
+                await asyncio.wait_for(self._server.wait_closed(), 2.0)
             self._server = None
 
     def drop_connections(self) -> int:

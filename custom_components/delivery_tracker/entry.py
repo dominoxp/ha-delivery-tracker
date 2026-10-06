@@ -7,9 +7,11 @@ nicht selbst in `entry.data`/`subentry.data` herumsuchen muessen.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 
+from .carriers import CarrierRegistry
 from .const import (
     CARRIER_GENERIC,
     CONF_DISABLED_CARRIERS,
@@ -27,16 +29,23 @@ from .models import Destination
 from .sources.imap_source import ImapConfig
 from .store import ShipmentStore
 
+if TYPE_CHECKING:
+    from .coordinator import DeliveryTrackerCoordinator, SourceHandle
+
 
 @dataclass(slots=True)
 class DeliveryTrackerData:
-    """Laufzeitdaten eines geladenen Entries (`entry.runtime_data`).
-
-    Step 2.2 ergaenzt Coordinator und Quellen.
-    """
+    """Laufzeitdaten eines geladenen Entries (`entry.runtime_data`)."""
 
     store: ShipmentStore
+    coordinator: DeliveryTrackerCoordinator
+    options: GlobalOptions
     destinations: list[Destination] = field(default_factory=list)
+
+    @property
+    def sources(self) -> dict[str, SourceHandle]:
+        """Alle Quellen nach Subentry-ID, mit Zustand und letztem Fehler."""
+        return self.coordinator.sources
 
 
 type DeliveryTrackerConfigEntry = ConfigEntry[DeliveryTrackerData]
@@ -67,6 +76,15 @@ class GlobalOptions:
         if carrier_id == CARRIER_GENERIC:
             return self.generic_fallback
         return carrier_id not in self.disabled_carriers
+
+    def filter_registry(self, registry: CarrierRegistry) -> CarrierRegistry:
+        """Eine Registry nur mit den Plugins, die Mails auswerten duerfen.
+
+        Die globale Registry bleibt unangetastet — sie ist pro HA-Instanz geteilt.
+        """
+        return CarrierRegistry(
+            [plugin for plugin in registry.plugins if self.carrier_enabled(plugin.carrier_id)]
+        )
 
 
 def destination_from_subentry(subentry: ConfigSubentry) -> Destination:

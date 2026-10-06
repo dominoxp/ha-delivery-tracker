@@ -1,25 +1,34 @@
 """Delivery Tracker — Paketverfolgung aus E-Mails und APIs.
 
-Der Entry richtet bisher die Carrier-Registry, die Devices der Zielorte und den
-Sendungs-Store ein. Coordinator, Quellen und Entities kommen in den spaeteren
-Steps dazu.
+Beim Laden eines Entries:
+
+1. Store laden — vor jedem Abruf, damit Reload und Neustart keine Sendung
+   verlieren oder doppelt anlegen. Danach alle Sendungen gegen die aktuellen
+   Zielorte bewerten: So ziehen die Sendungen eines geloeschten Zielorts nach
+   „Unbekannt" um, statt zu verschwinden.
+2. Coordinator mit den Quellen aus den `mailbox`- und `api_source`-Subentries
+   anlegen und die Postfach-Loops starten.
+3. Der erste Abruf laeuft im Hintergrund: Das Lookback eines Postfachs kann
+   lange dauern und darf das Setup nicht aufhalten. Eine kaputte Quelle laesst
+   das Setup ebenfalls nicht scheitern — ihr Fehler steht an der Quelle.
 
 Jede Aenderung an Options oder Subentries laedt den Entry ueber den
-Update-Listener neu. Beim Laden werden alle gespeicherten Sendungen gegen die
-aktuellen Zielorte bewertet — so ziehen die Sendungen eines geloeschten
-Zielorts nach „Unbekannt" um, statt zu verschwinden.
+Update-Listener neu.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 
 from .addresses import AddressMatcher
 from .carriers import async_get_registry
-from .const import PLATFORMS, SUBENTRY_DESTINATION
+from .const import DOMAIN, PLATFORMS, SUBENTRY_DESTINATION
+from .coordinator import DeliveryTrackerCoordinator
 from .entry import (
     DeliveryTrackerConfigEntry,
     DeliveryTrackerData,
@@ -37,38 +46,79 @@ async def async_setup_entry(hass: HomeAssistant, entry: DeliveryTrackerConfigEnt
     """Einen Config-Entry aufbauen."""
     _LOGGER.debug("Delivery Tracker wird eingerichtet: %s", entry.title)
 
-    # Discovery laeuft nur beim allerersten Aufruf; danach kommt der Cache.
-    registry = await async_get_registry(hass)
-    _LOGGER.debug("Carrier-Plugins verfuegbar: %s", ", ".join(registry.carrier_ids) or "keine")
-
     options = GlobalOptions.from_entry(entry)
+    # Discovery laeuft nur beim allerersten Aufruf; danach kommt der Cache.
+    registry = options.filter_registry(await async_get_registry(hass))
+    _LOGGER.debug("Aktive Carrier-Plugins: %s", ", ".join(registry.carrier_ids) or "keine")
+
     destinations = destinations_from_entry(entry)
     _async_sync_destination_devices(hass, entry)
 
-    store = ShipmentStore(hass, retention_days=options.retention_days)
+    store = ShipmentStore(
+        hass, retention_days=options.retention_days, stale_days=options.stale_days
+    )
     await store.async_load()
     # Zielorte koennen sich seit dem letzten Laden geaendert haben.
     if moved := store.async_assign_destinations(AddressMatcher(destinations)):
         _LOGGER.debug("%d Sendungen nach Aenderung der Zielorte neu zugeordnet", len(moved))
 
-    entry.runtime_data = DeliveryTrackerData(store=store, destinations=destinations)
+    coordinator = DeliveryTrackerCoordinator(
+        hass, entry, store=store, registry=registry, destinations=destinations
+    )
+    entry.runtime_data = DeliveryTrackerData(
+        store=store, coordinator=coordinator, options=options, destinations=destinations
+    )
+
+    # Ein eigener Listener haelt den Takt des Coordinators am Laufen, auch bevor
+    # es Entities gibt; Step 2.5 haengt hier die Events an.
+    entry.async_on_unload(coordinator.async_add_listener(_async_coordinator_updated(coordinator)))
+
+    # Beim Herunterfahren entlaedt HA die Entries nicht; die Postfach-
+    # Verbindungen sollen trotzdem geordnet schliessen.
+    async def _async_on_stop(_event: Event) -> None:
+        await coordinator.async_shutdown()
+
+    entry.async_on_unload(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_on_stop))
+    await coordinator.async_start()
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+
+    entry.async_create_background_task(
+        hass, coordinator.async_refresh(), f"{DOMAIN} first refresh {entry.entry_id}"
+    )
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: DeliveryTrackerConfigEntry) -> bool:
-    """Einen Config-Entry wieder abbauen."""
+    """Einen Config-Entry wieder abbauen: Quellen schliessen, Store final schreiben."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        await entry.runtime_data.store.async_save()
+        data = entry.runtime_data
+        await data.coordinator.async_shutdown()
+        await data.store.async_save()
     return unloaded
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: DeliveryTrackerConfigEntry) -> None:
     """Den Entry nach Aenderungen an Options oder Subentries neu laden."""
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+def _async_coordinator_updated(coordinator: DeliveryTrackerCoordinator) -> Callable[[], None]:
+    """Listener, der vorerst nur die Statuswechsel eines Durchlaufs protokolliert."""
+
+    @callback
+    def _listener() -> None:
+        for change in coordinator.data.status_changes:
+            _LOGGER.debug(
+                "Sendung %s: %s -> %s",
+                change.shipment_id,
+                change.previous.value if change.previous else "neu",
+                change.current.value,
+            )
+
+    return _listener
 
 
 @callback

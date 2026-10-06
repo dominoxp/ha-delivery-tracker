@@ -1,12 +1,20 @@
 """Datenquellen der Integration (IMAP, APIs).
 
 Die gemeinsame Schnittstelle steht in `base`, die erste echte Quelle in
-`imap_source`; die 17track-Quelle kommt in Step 3.1 dazu.
+`imap_source`; die 17track-Quelle kommt in Step 3.1 dazu und traegt sich in
+`API_SOURCE_FACTORIES` ein.
 """
 
 from __future__ import annotations
 
-from .base import TrackingSource
+from .base import (
+    API_SOURCE_FACTORIES,
+    ApiSourceFactory,
+    SourceAuthError,
+    SourceError,
+    SourcePermanentError,
+    TrackingSource,
+)
 from .imap_source import (
     ImapAuthError,
     ImapConfig,
@@ -25,6 +33,8 @@ from .imap_source import (
 )
 
 __all__ = [
+    "API_SOURCE_FACTORIES",
+    "ApiSourceFactory",
     "ImapAuthError",
     "ImapConfig",
     "ImapConnectionError",
@@ -39,5 +49,8 @@ __all__ = [
     "MailFolder",
     "MailHandler",
     "RawMail",
+    "SourceAuthError",
+    "SourceError",
+    "SourcePermanentError",
     "TrackingSource",
 ]

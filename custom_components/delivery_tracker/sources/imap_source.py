@@ -75,7 +75,7 @@ from ..const import (
     SOURCE_IMAP,
 )
 from ..models import Shipment
-from .base import TrackingSource
+from .base import SourceAuthError, SourceError, SourcePermanentError, TrackingSource
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -133,7 +133,7 @@ class ImapMode(StrEnum):
     POLLING = "polling"
 
 
-class ImapError(Exception):
+class ImapError(SourceError):
     """Basisfehler der IMAP-Quelle."""
 
 
@@ -141,11 +141,11 @@ class ImapConnectionError(ImapError):
     """Server nicht erreichbar oder Verbindung abgebrochen — wird wiederholt."""
 
 
-class ImapPermanentError(ImapError):
+class ImapPermanentError(ImapError, SourcePermanentError):
     """Fehler, den nur eine Konfigurationsaenderung behebt."""
 
 
-class ImapAuthError(ImapPermanentError):
+class ImapAuthError(ImapPermanentError, SourceAuthError):
     """Benutzername oder Passwort werden abgelehnt."""
 
 
@@ -261,6 +261,8 @@ class ImapSource(TrackingSource):
 
     * `async_start()` startet den Hintergrund-Loop, der von sich aus liest —
       per IDLE oder im Polling-Intervall — und ueber `on_new_data` Bescheid gibt.
+      Derselbe Callback meldet auch, wenn der Loop an einem dauerhaften Fehler
+      endet; der naechste `async_fetch` wirft diesen dann.
     * `async_fetch()` liefert alles, was seit dem letzten Aufruf zusammenkam.
       Laeuft kein Hintergrund-Loop, holt der Aufruf die Mails selbst ab.
     """
@@ -394,6 +396,10 @@ class ImapSource(TrackingSource):
                 # Weiterprobieren waere sinnlos und bringt bei Gmail/Outlook eine Sperre ein.
                 _LOGGER.error("%s: %s — die Quelle bleibt bis zur Korrektur stehen", self, err)
                 await self._async_disconnect(ImapState.ERROR, err)
+                # Der Abnehmer soll den Fehler sofort sehen, nicht erst beim naechsten Takt:
+                # Der folgende `async_fetch` wirft ihn.
+                if self._on_new_data is not None:
+                    self._on_new_data()
                 return
             except (ImapConnectionError, *_CONNECTION_ERRORS) as err:
                 _LOGGER.debug(

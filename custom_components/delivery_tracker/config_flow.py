@@ -88,6 +88,7 @@ from .const import (
     DESTINATION_UNKNOWN,
     DESTINATION_UNKNOWN_NAME,
     DOMAIN,
+    REAUTH_SUBENTRY_ID,
     SOURCE_SEVENTEENTRACK,
     SUBENTRY_API_SOURCE,
     SUBENTRY_DESTINATION,
@@ -122,6 +123,8 @@ ERROR_NO_RULES = "no_rules"
 ERROR_INVALID_API_KEY = "invalid_api_key"
 
 ABORT_ALREADY_CONFIGURED = "already_configured"
+ABORT_REAUTH_SUCCESSFUL = "reauth_successful"
+ABORT_REAUTH_UNKNOWN_SOURCE = "reauth_unknown_source"
 
 # Grenzen der Zahlenfelder.
 MIN_POLL_INTERVAL = 30
@@ -181,6 +184,8 @@ class DeliveryTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    _reauth_subentry_id: str | None = None
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> DeliveryTrackerOptionsFlow:
@@ -218,6 +223,52 @@ class DeliveryTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_DISABLED_CARRIERS: [],
                 CONF_GENERIC_FALLBACK: DEFAULT_GENERIC_FALLBACK,
             },
+        )
+
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
+        """Eine Quelle meldet abgelehnte Zugangsdaten (angestossen vom Coordinator).
+
+        Die Zugangsdaten liegen im Subentry, nicht am Hub-Entry; welcher es ist,
+        steht in den Reauth-Daten.
+        """
+        self._reauth_subentry_id = entry_data.get(REAUTH_SUBENTRY_ID)
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Neues Passwort bzw. neuen API-Schluessel abfragen und pruefen."""
+        entry = self._get_reauth_entry()
+        subentry = entry.subentries.get(self._reauth_subentry_id or "")
+        if subentry is None or subentry.subentry_type not in (
+            SUBENTRY_MAILBOX,
+            SUBENTRY_API_SOURCE,
+        ):
+            return self.async_abort(reason=ABORT_REAUTH_UNKNOWN_SOURCE)
+
+        is_mailbox = subentry.subentry_type == SUBENTRY_MAILBOX
+        secret = CONF_PASSWORD if is_mailbox else CONF_API_KEY
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            value = str(user_input[secret])
+            data = {**subentry.data, secret: value if is_mailbox else value.strip()}
+            if is_mailbox:
+                error = await async_test_folder(data)
+            else:
+                error = await async_validate_api_key(
+                    self.hass, data[CONF_SOURCE_TYPE], data[CONF_API_KEY]
+                )
+            if error is None:
+                # Der Update-Listener laedt den Entry danach neu.
+                self.hass.config_entries.async_update_subentry(entry, subentry, data=data)
+                return self.async_abort(reason=ABORT_REAUTH_SUCCESSFUL)
+            errors["base"] = error
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema({vol.Required(secret): _PASSWORD_SELECTOR}),
+            errors=errors,
+            description_placeholders={"source": subentry.title},
         )
 
 

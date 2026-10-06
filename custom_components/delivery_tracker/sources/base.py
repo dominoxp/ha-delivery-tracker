@@ -8,9 +8,25 @@ dieselbe Sendung uebernimmt `merge.merge_shipments`.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Mapping
+from typing import Any
+
+from homeassistant.core import HomeAssistant
 
 from ..merge import source_priority
 from ..models import Shipment
+
+
+class SourceError(Exception):
+    """Basisfehler aller Quellen. Alles andere gilt dem Coordinator als voruebergehend."""
+
+
+class SourcePermanentError(SourceError):
+    """Fehler, den nur eine Konfigurationsaenderung behebt — Wiederholen ist zwecklos."""
+
+
+class SourceAuthError(SourcePermanentError):
+    """Zugangsdaten oder API-Schluessel werden abgelehnt; fuehrt zum Reauth-Hinweis."""
 
 
 class TrackingSource(ABC):
@@ -47,3 +63,11 @@ class TrackingSource(ABC):
     def __repr__(self) -> str:
         """Kurzform fuer Logs und Diagnostics."""
         return f"<{type(self).__name__} {self.source_id} prio={self.priority}>"
+
+
+ApiSourceFactory = Callable[[HomeAssistant, Mapping[str, Any]], TrackingSource]
+"""Baut eine API-Quelle aus den Daten ihres `api_source`-Subentrys."""
+
+API_SOURCE_FACTORIES: dict[str, ApiSourceFactory] = {}
+"""Fabriken je Quellentyp (`CONF_SOURCE_TYPE`). Step 3.1 traegt 17track hier ein;
+ein Subentry ohne Fabrik wird beim Setup als Fehler der Quelle vermerkt."""

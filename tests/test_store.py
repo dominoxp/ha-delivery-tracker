@@ -216,3 +216,60 @@ async def test_active_shipments(hass: HomeAssistant, hass_storage: dict[str, Any
     store.async_upsert(_shipment("dhl_zu", status=ShipmentStatus.DELIVERED, delivered_at=NOW))
 
     assert [item.id for item in store.active_shipments] == ["dhl_aktiv"]
+
+
+async def test_stale_days_entfernt_aktive_ohne_aktualisierung(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """Aktiv und seit `stale_days` still verschwindet; lange laufend mit frischer Mail bleibt."""
+    store = ShipmentStore(hass, retention_days=14, stale_days=60)
+    await store.async_load()
+    store.async_upsert(
+        _shipment("amazon_order_vergessen", status=ShipmentStatus.ORDERED, last_updated=NOW)
+    )
+    # Ueber `upsert` laesst sich `last_updated` nicht zuruecksetzen; die alte
+    # Sendung entsteht daher direkt mit altem Zeitstempel.
+    store.async_upsert(
+        _shipment(
+            "amazon_order_alt",
+            status=ShipmentStatus.ORDERED,
+            last_updated=NOW - timedelta(days=61),
+        )
+    )
+    lange_unterwegs = _shipment("dhl_lang", last_updated=NOW - timedelta(days=1))
+    lange_unterwegs.first_seen = NOW - timedelta(days=90)
+    store.async_upsert(lange_unterwegs)
+
+    removed = store.async_purge(now=NOW)
+
+    assert removed == ["amazon_order_alt"]
+    assert sorted(item.id for item in store.shipments) == ["amazon_order_vergessen", "dhl_lang"]
+
+
+async def test_stale_days_null_schaltet_ab(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """`stale_days = 0` laesst aktive Sendungen unbegrenzt stehen."""
+    store = ShipmentStore(hass, stale_days=0)
+    await store.async_load()
+    store.async_upsert(_shipment("dhl_uralt", last_updated=NOW - timedelta(days=400)))
+
+    assert store.async_purge(now=NOW) == []
+
+
+async def test_quellen_zustand_ueberlebt_neustart(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """Der Fortschritt einer Quelle wird mitgespeichert und laesst sich aufraeumen."""
+    store = ShipmentStore(hass)
+    await store.async_load()
+    store.async_set_source_state("postfach_1", {"uid_validity": 7, "last_uid": 42})
+    store.async_set_source_state("geloescht", {"last_uid": 1})
+    store.async_prune_source_states({"postfach_1"})
+    await store.async_save()
+
+    neustart = ShipmentStore(hass)
+    await neustart.async_load()
+
+    assert neustart.source_state("postfach_1") == {"uid_validity": 7, "last_uid": 42}
+    assert neustart.source_state("geloescht") is None

@@ -18,6 +18,7 @@ from homeassistant.util import dt as dt_util
 from .addresses import AddressMatcher
 from .const import (
     DEFAULT_RETENTION_DAYS,
+    DEFAULT_STALE_DAYS,
     STORAGE_KEY,
     STORAGE_SAVE_DELAY,
     STORAGE_VERSION,
@@ -36,19 +37,29 @@ class ShipmentStore:
         hass: HomeAssistant,
         *,
         retention_days: int = DEFAULT_RETENTION_DAYS,
+        stale_days: int = DEFAULT_STALE_DAYS,
     ) -> None:
         """Store anlegen; geladen wird erst mit `async_load`."""
         self._hass = hass
         self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self._shipments: dict[str, Shipment] = {}
+        self._source_states: dict[str, dict[str, Any]] = {}
         self.retention_days = retention_days
+        self.stale_days = stale_days
 
     async def async_load(self) -> None:
         """Gespeicherten Stand einlesen. Unlesbare Eintraege werden verworfen."""
         data = await self._store.async_load()
         self._shipments = {}
+        self._source_states = {}
         if not data:
             return
+
+        states = data.get("source_states")
+        if isinstance(states, dict):
+            self._source_states = {
+                str(key): dict(value) for key, value in states.items() if isinstance(value, dict)
+            }
 
         for raw in data.get("shipments") or []:
             try:
@@ -112,26 +123,66 @@ class ShipmentStore:
 
     @callback
     def async_purge(self, *, now: datetime | None = None) -> list[str]:
-        """Abgeschlossene Sendungen aelter als die Retention entfernen.
+        """Verfallene Sendungen entfernen.
+
+        Zwei Regeln, jede mit `0` abschaltbar:
+
+        * abgeschlossen und laenger als `retention_days` her (ab `closed_at`),
+        * nicht abgeschlossen und seit `stale_days` ohne Aktualisierung — sonst
+          bliebe etwa eine Bestellbestaetigung ohne Versandmail fuer immer aktiv.
+          Massgeblich ist `last_updated`, nicht `first_seen`: Eine lange laufende
+          Sendung mit frischer Mail bleibt.
 
         Gibt die IDs der entfernten Sendungen zurueck.
         """
-        if self.retention_days <= 0:
-            return []
+        now = now or dt_util.utcnow()
+        closed_cutoff = (
+            now - timedelta(days=self.retention_days) if self.retention_days > 0 else None
+        )
+        stale_cutoff = now - timedelta(days=self.stale_days) if self.stale_days > 0 else None
 
-        cutoff = (now or dt_util.utcnow()) - timedelta(days=self.retention_days)
-        removed = [
-            shipment.id
-            for shipment in self._shipments.values()
-            if shipment.is_closed and shipment.closed_at < cutoff
-        ]
+        removed: list[str] = []
+        stale = 0
+        for shipment in self._shipments.values():
+            if shipment.is_closed:
+                if closed_cutoff is not None and shipment.closed_at < closed_cutoff:
+                    removed.append(shipment.id)
+            elif stale_cutoff is not None and shipment.last_updated < stale_cutoff:
+                removed.append(shipment.id)
+                stale += 1
         for shipment_id in removed:
             del self._shipments[shipment_id]
 
         if removed:
-            _LOGGER.debug("%d abgeschlossene Sendungen nach Retention entfernt", len(removed))
+            _LOGGER.debug(
+                "%d Sendungen nach Retention entfernt, davon %d ohne Aktualisierung",
+                len(removed),
+                stale,
+            )
             self.async_schedule_save()
         return removed
+
+    def source_state(self, key: str) -> dict[str, Any] | None:
+        """Gespeicherter Zustand einer Quelle (z.B. IMAP-Fortschritt), falls vorhanden."""
+        state = self._source_states.get(key)
+        return dict(state) if state is not None else None
+
+    @callback
+    def async_set_source_state(self, key: str, state: dict[str, Any]) -> None:
+        """Zustand einer Quelle merken; geschrieben wird nur bei einer Aenderung."""
+        if self._source_states.get(key) == state:
+            return
+        self._source_states[key] = dict(state)
+        self.async_schedule_save()
+
+    @callback
+    def async_prune_source_states(self, keep: set[str]) -> None:
+        """Zustaende geloeschter Quellen verwerfen."""
+        stale = set(self._source_states) - keep
+        for key in stale:
+            del self._source_states[key]
+        if stale:
+            self.async_schedule_save()
 
     @callback
     def async_schedule_save(self) -> None:
@@ -150,4 +201,7 @@ class ShipmentStore:
     @callback
     def _data_to_save(self) -> dict[str, Any]:
         """Serialisierter Zustand fuer den Store."""
-        return {"shipments": [shipment.to_dict() for shipment in self._shipments.values()]}
+        return {
+            "shipments": [shipment.to_dict() for shipment in self._shipments.values()],
+            "source_states": {key: dict(state) for key, state in self._source_states.items()},
+        }
