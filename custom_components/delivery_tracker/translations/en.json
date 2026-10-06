@@ -261,6 +261,171 @@
       "options": {
         "seventeentrack": "17TRACK"
       }
+    },
+    "shipment_status": {
+      "options": {
+        "unknown": "Unknown",
+        "ordered": "Ordered",
+        "label_created": "Label created",
+        "in_transit": "In transit",
+        "delayed": "Delayed",
+        "customs": "In customs",
+        "out_for_delivery": "Out for delivery",
+        "ready_for_pickup": "Ready for pickup",
+        "delivered": "Delivered",
+        "delivery_failed": "Delivery failed",
+        "returned": "Returned to sender"
+      }
+    }
+  },
+  "services": {
+    "get_shipments": {
+      "name": "Get shipments",
+      "description": "Returns shipments with all details. Without filters, all active shipments.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Instance",
+          "description": "Only shipments of this instance. Leave empty for all."
+        },
+        "status": {
+          "name": "Status",
+          "description": "Only shipments with one of these statuses. Closed shipments only appear if their status is listed here."
+        },
+        "carrier": {
+          "name": "Carrier",
+          "description": "Only shipments of these carriers, e.g. \"dhl\" or \"amazon\"."
+        },
+        "destination": {
+          "name": "Destination",
+          "description": "Only shipments to these destinations, by ID or name. \"unknown\" stands for unassigned shipments."
+        },
+        "include_events": {
+          "name": "Include history",
+          "description": "Include the full event history of every shipment."
+        }
+      }
+    },
+    "add_shipment": {
+      "name": "Add shipment",
+      "description": "Adds a shipment manually. An email arriving later completes the same shipment.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Instance",
+          "description": "Only needed if several instances are set up."
+        },
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "The carrier's tracking number; spaces and dashes do not matter."
+        },
+        "carrier": {
+          "name": "Carrier",
+          "description": "Carrier ID, e.g. \"dhl\". Leave empty to derive it from the number format."
+        },
+        "destination": {
+          "name": "Destination",
+          "description": "ID or name of the destination. Takes precedence over the automatic assignment."
+        },
+        "description": {
+          "name": "Description",
+          "description": "Free display text, e.g. the contents."
+        }
+      }
+    },
+    "remove_shipment": {
+      "name": "Remove shipment",
+      "description": "Deletes a shipment immediately.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Instance",
+          "description": "Only search this instance. Leave empty for all."
+        },
+        "shipment_id": {
+          "name": "Shipment ID",
+          "description": "The ID from `get_shipments` or the `shipments` attribute, e.g. \"dhl_00340434161094042557\"."
+        }
+      }
+    },
+    "mark_delivered": {
+      "name": "Mark as delivered",
+      "description": "Sets a shipment to delivered immediately.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Instance",
+          "description": "Only search this instance. Leave empty for all."
+        },
+        "shipment_id": {
+          "name": "Shipment ID",
+          "description": "The ID from `get_shipments` or the `shipments` attribute, e.g. \"dhl_00340434161094042557\"."
+        }
+      }
+    },
+    "refresh": {
+      "name": "Refresh",
+      "description": "Fetches the sources immediately instead of waiting for the interval. Mailboxes with push report new emails right away anyway.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Instance",
+          "description": "Only refresh this instance. Leave empty for all."
+        },
+        "source": {
+          "name": "Source",
+          "description": "Only fetch this source, by name or ID. Leave empty for all."
+        }
+      }
+    },
+    "test_parser": {
+      "name": "Test parser",
+      "description": "Runs an email text through all carrier plugins and shows scores, winner and extracted fields. A tool for building new rules.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Instance",
+          "description": "Test with the settings of this instance, e.g. disabled carriers."
+        },
+        "subject": {
+          "name": "Subject",
+          "description": "The subject of the email."
+        },
+        "sender": {
+          "name": "Sender",
+          "description": "Sender address, optionally with a name like \"DHL <noreply@dhl.de>\"."
+        },
+        "body": {
+          "name": "Email text",
+          "description": "The text of the email, as plain text or HTML."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "no_entry": {
+      "message": "No matching Delivery Tracker instance is loaded."
+    },
+    "entry_not_loaded": {
+      "message": "The instance {entry} is not loaded."
+    },
+    "multiple_entries": {
+      "message": "Several instances are set up. Please select one."
+    },
+    "unknown_shipment": {
+      "message": "There is no shipment with the ID {shipment_id}."
+    },
+    "unknown_destination": {
+      "message": "There is no destination {destination}."
+    },
+    "unknown_carrier": {
+      "message": "The carrier {carrier} does not exist or is disabled. Available: {carriers}."
+    },
+    "unknown_source": {
+      "message": "There is no source {source}."
+    },
+    "invalid_tracking_number": {
+      "message": "{tracking_number} is not a valid {carrier} tracking number."
+    },
+    "unrecognized_tracking_number": {
+      "message": "{tracking_number} does not match any known carrier. Please specify the carrier or check the number."
+    },
+    "ambiguous_tracking_number": {
+      "message": "{tracking_number} matches several carriers ({carriers}). Please specify the carrier."
     }
   }
 }

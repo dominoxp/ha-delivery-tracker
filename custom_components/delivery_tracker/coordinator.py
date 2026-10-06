@@ -32,8 +32,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from collections.abc import Collection, Iterable, Mapping
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -55,11 +55,13 @@ from .const import (
     REAUTH_SUBENTRY_ID,
     SOURCE_FETCH_TIMEOUT,
     SOURCE_IMAP,
+    SOURCE_MANUAL,
     SUBENTRY_API_SOURCE,
     SUBENTRY_MAILBOX,
 )
 from .dates import local_day_range
-from .models import Destination, Shipment, ShipmentStatus
+from .merge import merge_events, merge_sources
+from .models import Destination, Shipment, ShipmentEvent, ShipmentStatus, SourceRecord
 from .pipeline import MailPipeline
 from .sources import (
     API_SOURCE_FACTORIES,
@@ -180,7 +182,7 @@ class SourceHandle:
 
 @dataclass(frozen=True, slots=True)
 class StatusChange:
-    """Ein Statuswechsel aus einem Durchlauf — Step 2.5 feuert daraus die Events."""
+    """Eine neue Sendung oder ein Statuswechsel — Quelle der Events auf dem HA-Bus."""
 
     shipment_id: str
     previous: ShipmentStatus | None
@@ -324,6 +326,8 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._matcher = AddressMatcher(destinations)
         self._lock = asyncio.Lock()
         self._closed = False
+        self._forced: set[str] | None = None
+        """Quellen, die der naechste Durchlauf unabhaengig vom Intervall abruft."""
 
         self.sources: dict[str, SourceHandle] = {}
         for subentry in entry.get_subentries_of_type(SUBENTRY_MAILBOX):
@@ -456,7 +460,15 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """Faellige Quellen abrufen, zusammenfuehren, zuordnen und bereinigen."""
         async with self._lock:
             now = dt_util.utcnow()
-            due = [handle for handle in self.sources.values() if handle.is_due(now)]
+            forced, self._forced = self._forced, None
+            if forced is None:
+                due = [handle for handle in self.sources.values() if handle.is_due(now)]
+            else:
+                due = [
+                    handle
+                    for key, handle in self.sources.items()
+                    if key in forced and handle.source is not None and not handle.state.is_permanent
+                ]
             results = await asyncio.gather(*(self._async_fetch(handle, now) for handle in due))
 
             changes: list[StatusChange] = []
@@ -471,13 +483,90 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     @callback
     def _async_upsert(self, incoming: Shipment) -> list[StatusChange]:
-        """Eine Sendung in den Store mergen; liefert den Statuswechsel, falls es einen gab."""
+        """Eine Sendung in den Store mergen.
+
+        Liefert eine Aenderung, wenn die Sendung neu ist oder ihr Status
+        gewechselt hat — eine Mail, die nur Bekanntes wiederholt, liefert nichts.
+        """
         previous = self.store.get(incoming.id)
         previous_status = previous.status if previous is not None else None
         merged, changed = self.store.async_upsert(incoming)
-        if not changed:
+        if previous is not None and not changed:
             return []
         return [StatusChange(merged.id, previous_status, merged.status, merged)]
+
+    # ------------------------------------------------------------------
+    # Eingriffe ueber die Actions
+    # ------------------------------------------------------------------
+
+    async def async_refresh_sources(self, keys: Collection[str] | None = None) -> None:
+        """Sofort abrufen, ohne Ruecksicht auf das Intervall der Quellen.
+
+        Ohne `keys` alle Quellen, sonst nur die genannten. Quellen mit einem
+        dauerhaften Fehler bleiben aussen vor — sie brauchen eine Korrektur,
+        keinen weiteren Versuch.
+        """
+        self._forced = set(self.sources) if keys is None else set(keys)
+        await self.async_refresh()
+
+    @callback
+    def async_add_shipment(self, shipment: Shipment) -> Shipment:
+        """Eine von Hand angelegte Sendung uebernehmen und sofort ausliefern.
+
+        Gibt es die Sendung schon, wird wie bei einer Mail zusammengefuehrt.
+        """
+        changes = self._async_upsert(shipment)
+        self.store.async_assign_destinations(self._matcher)
+        self._async_publish(changes)
+        stored = self.store.get(shipment.id)
+        assert stored is not None
+        return stored
+
+    @callback
+    def async_mark_delivered(self, shipment_id: str) -> Shipment | None:
+        """Eine Sendung als zugestellt markieren; `None`, wenn es sie nicht gibt.
+
+        Laeuft am Merge vorbei, weil der Status sonst etwa nach einer
+        gescheiterten Zustellung nicht mehr auf „zugestellt" wechseln duerfte.
+        """
+        shipment = self.store.get(shipment_id)
+        if shipment is None:
+            return None
+        if shipment.status is ShipmentStatus.DELIVERED:
+            return shipment
+
+        now = dt_util.utcnow()
+        updated = replace(
+            shipment,
+            status=ShipmentStatus.DELIVERED,
+            status_text=None,
+            delivered_at=now,
+            last_updated=now,
+            events=merge_events(
+                shipment.events, [ShipmentEvent(timestamp=now, status=ShipmentStatus.DELIVERED)]
+            ),
+            sources=merge_sources(
+                shipment.sources, [SourceRecord(source_id=SOURCE_MANUAL, fetched_at=now)]
+            ),
+        )
+        self.store.async_replace(updated)
+        self._async_publish([StatusChange(shipment.id, shipment.status, updated.status, updated)])
+        return updated
+
+    @callback
+    def async_remove_shipment(self, shipment_id: str) -> bool:
+        """Eine Sendung loeschen. True, wenn es sie gab."""
+        if not self.store.async_remove(shipment_id):
+            return False
+        self._async_publish(removed=[shipment_id])
+        return True
+
+    @callback
+    def _async_publish(
+        self, changes: Iterable[StatusChange] = (), removed: Iterable[str] = ()
+    ) -> None:
+        """Den aktuellen Stand sofort an Entities und Event-Listener geben."""
+        self.async_set_updated_data(self._build_data(dt_util.utcnow(), changes, removed))
 
     async def _async_fetch(self, handle: SourceHandle, now: datetime) -> list[Shipment]:
         """Eine Quelle abrufen. Wirft nie — der Fehler bleibt an der Quelle haengen."""

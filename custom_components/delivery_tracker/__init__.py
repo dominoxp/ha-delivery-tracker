@@ -13,17 +13,19 @@ Beim Laden eines Entries:
    das Setup ebenfalls nicht scheitern — ihr Fehler steht an der Quelle.
 
 Jede Aenderung an Options oder Subentries laedt den Entry ueber den
-Update-Listener neu.
+Update-Listener neu. Die Actions haengen nicht am Entry, sondern werden in
+`async_setup` einmal je HA-Start registriert (`services`).
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.typing import ConfigType
 
 from .addresses import AddressMatcher
 from .carriers import async_get_registry
@@ -37,9 +39,22 @@ from .entry import (
     destination_from_subentry,
     destinations_from_entry,
 )
+from .events import async_fire_events_listener
+from .services import async_setup_services
 from .store import ShipmentStore
 
 _LOGGER = logging.getLogger(__name__)
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Die Actions registrieren — einmal je HA-Start, nicht je Entry.
+
+    So ueberstehen sie Reloads, und mehrere Entries teilen sich dieselben.
+    """
+    async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: DeliveryTrackerConfigEntry) -> bool:
@@ -73,9 +88,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: DeliveryTrackerConfigEnt
         destinations=destinations,
     )
 
-    # Ein eigener Listener haelt den Takt des Coordinators am Laufen, auch bevor
-    # es Entities gibt; Step 2.5 haengt hier die Events an.
-    entry.async_on_unload(coordinator.async_add_listener(_async_coordinator_updated(coordinator)))
+    # Der Event-Listener haelt zugleich den Takt des Coordinators am Laufen,
+    # auch bevor es Entities gibt.
+    entry.async_on_unload(
+        coordinator.async_add_listener(async_fire_events_listener(hass, coordinator))
+    )
 
     # Beim Herunterfahren entlaedt HA die Entries nicht; die Postfach-
     # Verbindungen sollen trotzdem geordnet schliessen.
@@ -107,22 +124,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: DeliveryTrackerConfigEn
 async def async_reload_entry(hass: HomeAssistant, entry: DeliveryTrackerConfigEntry) -> None:
     """Den Entry nach Aenderungen an Options oder Subentries neu laden."""
     await hass.config_entries.async_reload(entry.entry_id)
-
-
-def _async_coordinator_updated(coordinator: DeliveryTrackerCoordinator) -> Callable[[], None]:
-    """Listener, der vorerst nur die Statuswechsel eines Durchlaufs protokolliert."""
-
-    @callback
-    def _listener() -> None:
-        for change in coordinator.data.status_changes:
-            _LOGGER.debug(
-                "Sendung %s: %s -> %s",
-                change.shipment_id,
-                change.previous.value if change.previous else "neu",
-                change.current.value,
-            )
-
-    return _listener
 
 
 @callback

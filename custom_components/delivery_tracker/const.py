@@ -127,6 +127,8 @@ DESTINATION_UNKNOWN_NAME: Final = "Unbekannt"
 # IDs der Datenquellen (Werte landen in `SourceRecord.source_id`).
 SOURCE_IMAP: Final = "imap"
 SOURCE_SEVENTEENTRACK: Final = "seventeentrack"
+# Eingaben ueber die Actions `add_shipment` und `mark_delivered`.
+SOURCE_MANUAL: Final = "manual"
 
 # Quellentypen, die als `api_source` angelegt werden koennen.
 API_SOURCE_TYPES: Final = (SOURCE_SEVENTEENTRACK,)
@@ -138,3 +140,31 @@ SOURCE_PRIORITIES: Final[dict[str, int]] = {
     SOURCE_IMAP: 10,
     SOURCE_SEVENTEENTRACK: 20,
 }
+
+# Actions (Step 2.5). Registriert einmal je HA-Start, nicht je Entry.
+SERVICE_GET_SHIPMENTS: Final = "get_shipments"
+SERVICE_ADD_SHIPMENT: Final = "add_shipment"
+SERVICE_REMOVE_SHIPMENT: Final = "remove_shipment"
+SERVICE_MARK_DELIVERED: Final = "mark_delivered"
+SERVICE_REFRESH: Final = "refresh"
+SERVICE_TEST_PARSER: Final = "test_parser"
+
+# Felder der Actions.
+ATTR_CONFIG_ENTRY_ID: Final = "config_entry_id"
+ATTR_SHIPMENT_ID: Final = "shipment_id"
+ATTR_STATUS: Final = "status"
+ATTR_CARRIER: Final = "carrier"
+ATTR_DESTINATION: Final = "destination"
+ATTR_INCLUDE_EVENTS: Final = "include_events"
+ATTR_INCLUDE_CLOSED: Final = "include_closed"
+ATTR_TRACKING_NUMBER: Final = "tracking_number"
+ATTR_DESCRIPTION: Final = "description"
+ATTR_SOURCE: Final = "source"
+ATTR_SUBJECT: Final = "subject"
+ATTR_SENDER: Final = "sender"
+ATTR_BODY: Final = "body"
+
+# Events auf dem HA-Bus. Sie feuern nur bei echten Aenderungen.
+EVENT_SHIPMENT_ADDED: Final = f"{DOMAIN}_shipment_added"
+EVENT_SHIPMENT_UPDATED: Final = f"{DOMAIN}_shipment_updated"
+EVENT_SHIPMENT_DELIVERED: Final = f"{DOMAIN}_shipment_delivered"

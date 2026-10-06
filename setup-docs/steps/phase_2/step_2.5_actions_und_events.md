@@ -61,10 +61,10 @@ abfragen, manuell pflegen, und jede Statusänderung ist als Ereignis auslösbar.
 
 ## Checkliste
 
-- [ ] services.yaml mit Selektoren und Übersetzungen
-- [ ] get_shipments mit Filtern und Response
-- [ ] add_shipment mit Validierung, remove_shipment, mark_delivered, refresh
-- [ ] test_parser mit Bewertungs- und Feldausgabe
-- [ ] Drei Events, nur bei echten Änderungen
-- [ ] Einmalige Action-Registrierung
-- [ ] Tests grün, inklusive Template-Sensor-Beispiel
+- [x] services.yaml mit Selektoren und Übersetzungen
+- [x] get_shipments mit Filtern und Response
+- [x] add_shipment mit Validierung, remove_shipment, mark_delivered, refresh
+- [x] test_parser mit Bewertungs- und Feldausgabe
+- [x] Drei Events, nur bei echten Änderungen
+- [x] Einmalige Action-Registrierung
+- [x] Tests grün, inklusive Template-Sensor-Beispiel

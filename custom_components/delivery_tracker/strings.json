@@ -261,6 +261,171 @@
       "options": {
         "seventeentrack": "17TRACK"
       }
+    },
+    "shipment_status": {
+      "options": {
+        "unknown": "Unbekannt",
+        "ordered": "Bestellt",
+        "label_created": "Angekündigt",
+        "in_transit": "Unterwegs",
+        "delayed": "Verspätet",
+        "customs": "Im Zoll",
+        "out_for_delivery": "In Zustellung",
+        "ready_for_pickup": "Abholbereit",
+        "delivered": "Zugestellt",
+        "delivery_failed": "Zustellung gescheitert",
+        "returned": "Zurück an Absender"
+      }
+    }
+  },
+  "services": {
+    "get_shipments": {
+      "name": "Sendungen abrufen",
+      "description": "Liefert Sendungen mit allen Details. Ohne Filter alle aktiven Sendungen.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Instanz",
+          "description": "Nur Sendungen dieser Instanz. Leer lassen für alle."
+        },
+        "status": {
+          "name": "Status",
+          "description": "Nur Sendungen mit einem dieser Status. Abgeschlossene Sendungen erscheinen nur, wenn ihr Status hier steht."
+        },
+        "carrier": {
+          "name": "Zusteller",
+          "description": "Nur Sendungen dieser Zusteller, etwa „dhl“ oder „amazon“."
+        },
+        "destination": {
+          "name": "Zieladresse",
+          "description": "Nur Sendungen an diese Zieladressen, per ID oder Name. „unknown“ steht für nicht zugeordnete Sendungen."
+        },
+        "include_events": {
+          "name": "Verlauf einschließen",
+          "description": "Die vollständige Event-Historie jeder Sendung mitliefern."
+        }
+      }
+    },
+    "add_shipment": {
+      "name": "Sendung hinzufügen",
+      "description": "Legt eine Sendung von Hand an. Eine später eintreffende Mail ergänzt dieselbe Sendung.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Instanz",
+          "description": "Nur nötig, wenn mehrere Instanzen eingerichtet sind."
+        },
+        "tracking_number": {
+          "name": "Trackingnummer",
+          "description": "Die Sendungsnummer des Zustellers; Leerzeichen und Bindestriche sind egal."
+        },
+        "carrier": {
+          "name": "Zusteller",
+          "description": "ID des Zustellers, etwa „dhl“. Leer lassen, um ihn aus dem Nummernformat abzuleiten."
+        },
+        "destination": {
+          "name": "Zieladresse",
+          "description": "ID oder Name der Zieladresse. Geht der automatischen Zuordnung vor."
+        },
+        "description": {
+          "name": "Beschreibung",
+          "description": "Freier Anzeigetext, etwa der Inhalt."
+        }
+      }
+    },
+    "remove_shipment": {
+      "name": "Sendung entfernen",
+      "description": "Löscht eine Sendung sofort.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Instanz",
+          "description": "Nur in dieser Instanz suchen. Leer lassen für alle."
+        },
+        "shipment_id": {
+          "name": "Sendungs-ID",
+          "description": "Die ID aus `get_shipments` oder dem Attribut `shipments`, etwa „dhl_00340434161094042557“."
+        }
+      }
+    },
+    "mark_delivered": {
+      "name": "Als zugestellt markieren",
+      "description": "Setzt eine Sendung sofort auf zugestellt.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Instanz",
+          "description": "Nur in dieser Instanz suchen. Leer lassen für alle."
+        },
+        "shipment_id": {
+          "name": "Sendungs-ID",
+          "description": "Die ID aus `get_shipments` oder dem Attribut `shipments`, etwa „dhl_00340434161094042557“."
+        }
+      }
+    },
+    "refresh": {
+      "name": "Aktualisieren",
+      "description": "Ruft die Quellen sofort ab, ohne auf das Intervall zu warten. Postfächer mit Push melden neue Mails ohnehin sofort.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Instanz",
+          "description": "Nur diese Instanz aktualisieren. Leer lassen für alle."
+        },
+        "source": {
+          "name": "Quelle",
+          "description": "Nur diese Quelle abrufen, per Name oder ID. Leer lassen für alle."
+        }
+      }
+    },
+    "test_parser": {
+      "name": "Parser testen",
+      "description": "Schickt einen Mailtext durch alle Zusteller-Plugins und zeigt Bewertung, Gewinner und extrahierte Felder. Werkzeug zum Bauen neuer Regeln.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Instanz",
+          "description": "Mit den Einstellungen dieser Instanz testen, etwa abgeschalteten Zustellern."
+        },
+        "subject": {
+          "name": "Betreff",
+          "description": "Der Betreff der Mail."
+        },
+        "sender": {
+          "name": "Absender",
+          "description": "Absenderadresse, gern mit Namen wie „DHL <noreply@dhl.de>“."
+        },
+        "body": {
+          "name": "Mailtext",
+          "description": "Der Text der Mail, als reiner Text oder HTML."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "no_entry": {
+      "message": "Es ist keine passende Delivery-Tracker-Instanz geladen."
+    },
+    "entry_not_loaded": {
+      "message": "Die Instanz {entry} ist nicht geladen."
+    },
+    "multiple_entries": {
+      "message": "Es sind mehrere Instanzen eingerichtet. Bitte eine Instanz auswählen."
+    },
+    "unknown_shipment": {
+      "message": "Eine Sendung mit der ID {shipment_id} gibt es nicht."
+    },
+    "unknown_destination": {
+      "message": "Eine Zieladresse {destination} gibt es nicht."
+    },
+    "unknown_carrier": {
+      "message": "Den Zusteller {carrier} gibt es nicht oder er ist abgeschaltet. Verfügbar: {carriers}."
+    },
+    "unknown_source": {
+      "message": "Eine Quelle {source} gibt es nicht."
+    },
+    "invalid_tracking_number": {
+      "message": "{tracking_number} ist keine gültige Trackingnummer von {carrier}."
+    },
+    "unrecognized_tracking_number": {
+      "message": "{tracking_number} passt zu keinem bekannten Zusteller. Bitte Zusteller angeben oder die Nummer prüfen."
+    },
+    "ambiguous_tracking_number": {
+      "message": "{tracking_number} passt zu mehreren Zustellern ({carriers}). Bitte den Zusteller angeben."
     }
   }
 }

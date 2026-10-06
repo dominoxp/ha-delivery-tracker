@@ -25,6 +25,7 @@ from homeassistant.core import HomeAssistant
 from ..const import DOMAIN
 from ..mail import MailMessage
 from ..models import Shipment
+from ..tracking import ChecksumResult
 from .base import CarrierPlugin, RulesCarrier
 from .rules import RulesError
 
@@ -168,6 +169,33 @@ class CarrierRegistry:
             return Resolution([])
         plugin, score = found[0]
         return Resolution([], plugin, score, len(found), failed=failed)
+
+    def identify(self, number: str) -> list[tuple[CarrierPlugin, ChecksumResult]]:
+        """Alle Plugins, deren Format eine normalisierte Nummer annimmt, bestes zuerst.
+
+        Eine falsche Pruefziffer schliesst aus. Eine stimmende geht vor einem
+        Format ohne Pruefverfahren, danach entscheidet die Plugin-Prioritaet.
+        """
+        found: list[tuple[CarrierPlugin, ChecksumResult]] = []
+        for plugin in self.plugins:
+            try:
+                result = plugin.check_tracking_number(number)
+            except Exception:
+                _LOGGER.exception(
+                    "Carrier-Plugin '%s' ist bei check_tracking_number() gescheitert",
+                    plugin.carrier_id,
+                )
+                continue
+            if result is not None and result is not ChecksumResult.INVALID:
+                found.append((plugin, result))
+        return sorted(
+            found,
+            key=lambda item: (
+                item[1] is not ChecksumResult.VALID,
+                -item[0].priority,
+                item[0].carrier_id,
+            ),
+        )
 
     def parse_all(self, mail: MailMessage) -> list[Shipment]:
         """Alle Sendungen der Mail; leer heisst keine Zuordnung oder keine Sendung.

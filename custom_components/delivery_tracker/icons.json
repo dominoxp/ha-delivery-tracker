@@ -44,5 +44,25 @@
         }
       }
     }
+  },
+  "services": {
+    "get_shipments": {
+      "service": "mdi:package-variant-closed"
+    },
+    "add_shipment": {
+      "service": "mdi:package-variant-plus"
+    },
+    "remove_shipment": {
+      "service": "mdi:package-variant-remove"
+    },
+    "mark_delivered": {
+      "service": "mdi:package-variant-closed-check"
+    },
+    "refresh": {
+      "service": "mdi:refresh"
+    },
+    "test_parser": {
+      "service": "mdi:test-tube"
+    }
   }
 }

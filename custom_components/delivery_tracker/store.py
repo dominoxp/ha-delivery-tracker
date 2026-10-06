@@ -98,6 +98,16 @@ class ShipmentStore:
         return merged, has_status_changed(previous, merged)
 
     @callback
+    def async_replace(self, shipment: Shipment) -> None:
+        """Eine Sendung ohne Merge ueberschreiben — fuer bewusste Eingriffe des Nutzers.
+
+        Der Merge liesse einen Status nie zuruecklaufen; „manuell zugestellt"
+        muss aber auch eine gescheiterte Zustellung abloesen koennen.
+        """
+        self._shipments[shipment.id] = shipment
+        self.async_schedule_save()
+
+    @callback
     def async_assign_destinations(self, matcher: AddressMatcher) -> list[str]:
         """Alle Sendungen ihren Zielorten neu zuordnen.
 

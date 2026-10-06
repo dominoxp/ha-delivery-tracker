@@ -16,7 +16,8 @@ from typing import Self
 
 from ..mail import MailMessage
 from ..models import Shipment
-from .helpers import build_shipments_from_rules, score_mail
+from ..tracking import ChecksumResult
+from .helpers import build_shipments_from_rules, check_tracking_number, score_mail
 from .rules import RULES_FILENAME, CarrierRules, load_rules
 
 
@@ -59,6 +60,18 @@ class CarrierPlugin(ABC):
         """Die Sendungsverfolgungs-URL zu einer Nummer bilden."""
         return None
 
+    def check_tracking_number(self, number: str) -> ChecksumResult | None:
+        """Beurteilen, ob eine normalisierte Nummer eine dieses Zustellers sein kann.
+
+        `None` heisst „falsches Format", sonst entscheidet die Pruefziffer.
+        Grundlage der Action `add_shipment`, die keine Mail als Beleg hat.
+        """
+        return None
+
+    def carrier_for_number(self, number: str) -> str:
+        """Die Carrier-ID einer von diesem Plugin akzeptierten Nummer."""
+        return self.carrier_id
+
     def __repr__(self) -> str:
         """Kurzform fuer Logs und Diagnostics."""
         return f"<{type(self).__name__} {self.carrier_id}>"
@@ -97,3 +110,7 @@ class RulesCarrier(CarrierPlugin):
     def tracking_url(self, tracking_number: str) -> str | None:
         """URL aus der Vorlage in den Regeln."""
         return self.rules.tracking_url(tracking_number)
+
+    def check_tracking_number(self, number: str) -> ChecksumResult | None:
+        """Muster und Pruefverfahren aus den Regeln."""
+        return check_tracking_number(self.rules, number)

@@ -132,6 +132,15 @@ class GenericCarrier(RulesCarrier):
             shipment.id = build_shipment_id(shipment.carrier, number)
         return shipments
 
+    def check_tracking_number(self, number: str) -> ChecksumResult | None:
+        """Auch hier gilt der strenge Massstab: nur mit stimmender Pruefziffer."""
+        result = super().check_tracking_number(number)
+        return result if result is ChecksumResult.VALID else None
+
+    def carrier_for_number(self, number: str) -> str:
+        """Den Zusteller aus dem Format ableiten, sonst bleibt es `generic`."""
+        return carrier_for(number) or self.carrier_id
+
 
 PLUGIN = GenericCarrier.from_directory(Path(__file__).parent)
 

@@ -224,6 +224,12 @@ class Shipment:
     Bleibt auch erhalten, wenn keine Zuordnung gelingt: Aus ihr legt der Nutzer
     im Options-Flow die fehlende Regel an.
     """
+    destination_override: str | None = None
+    """Vom Nutzer festgelegter Zielort (Action `add_shipment`).
+
+    Geht der automatischen Zuordnung vor, solange es den Zielort gibt — sonst
+    wuerde die Neubewertung bei jedem Durchlauf die Angabe wieder verwerfen.
+    """
     recipient_emails: list[str] = field(default_factory=list)
     """Empfaengeradressen der Mails zu dieser Sendung (`To`, `Delivered-To`, ...).
 
@@ -313,6 +319,7 @@ class Shipment:
             "delivered_at": _dt_to_iso(self.delivered_at),
             "destination_id": self.destination_id,
             "destination_raw": self.destination_raw,
+            "destination_override": self.destination_override,
             "recipient_emails": list(self.recipient_emails),
             "sender": self.sender,
             "description": self.description,
@@ -342,6 +349,7 @@ class Shipment:
             delivered_at=_dt_from_iso(data.get("delivered_at"), field_name="delivered_at"),
             destination_id=data.get("destination_id"),
             destination_raw=data.get("destination_raw"),
+            destination_override=data.get("destination_override"),
             recipient_emails=_str_list(data.get("recipient_emails")),
             sender=data.get("sender"),
             description=data.get("description"),

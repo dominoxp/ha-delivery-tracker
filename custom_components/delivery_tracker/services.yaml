@@ -1,0 +1,119 @@
+# Beschreibung der Actions fuer die UI. Namen und Texte stehen in strings.json.
+
+get_shipments:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: delivery_tracker
+    status:
+      example: '["out_for_delivery", "ready_for_pickup"]'
+      selector:
+        select:
+          multiple: true
+          translation_key: shipment_status
+          options:
+            - unknown
+            - ordered
+            - label_created
+            - in_transit
+            - delayed
+            - customs
+            - out_for_delivery
+            - ready_for_pickup
+            - delivered
+            - delivery_failed
+            - returned
+    carrier:
+      example: dhl
+      selector:
+        text:
+          multiple: true
+    destination:
+      example: zuhause
+      selector:
+        text:
+          multiple: true
+    include_events:
+      default: false
+      selector:
+        boolean:
+
+add_shipment:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: delivery_tracker
+    tracking_number:
+      required: true
+      example: "00340434161094042557"
+      selector:
+        text:
+    carrier:
+      example: dhl
+      selector:
+        text:
+    destination:
+      example: zuhause
+      selector:
+        text:
+    description:
+      example: Neue Kaffeemaschine
+      selector:
+        text:
+
+remove_shipment:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: delivery_tracker
+    shipment_id:
+      required: true
+      example: dhl_00340434161094042557
+      selector:
+        text:
+
+mark_delivered:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: delivery_tracker
+    shipment_id:
+      required: true
+      example: dhl_00340434161094042557
+      selector:
+        text:
+
+refresh:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: delivery_tracker
+    source:
+      example: Privat
+      selector:
+        text:
+
+test_parser:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: delivery_tracker
+    subject:
+      example: Ihre DHL Sendung kommt heute
+      selector:
+        text:
+    sender:
+      example: DHL Paket <noreply@dhl.de>
+      selector:
+        text:
+    body:
+      required: true
+      selector:
+        text:
+          multiline: true

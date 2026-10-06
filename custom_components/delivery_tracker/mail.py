@@ -383,6 +383,32 @@ def _fallback_message_id(raw: bytes) -> str:
     return f"<{digest}@delivery-tracker.invalid>"
 
 
+_HTML_HINT: Final = re.compile(r"<(?:html|body|div|p|table|td|br|a)\b", re.IGNORECASE)
+
+
+def mail_from_text(subject: str, sender: str, body: str) -> MailMessage:
+    """Eine Mail aus Betreff, Absender und Text bauen — fuer die Action `test_parser`.
+
+    `sender` darf eine nackte Adresse oder „Name <adresse>" sein. Sieht der
+    Text nach HTML aus, wird er wie der HTML-Teil einer echten Mail behandelt.
+    """
+    from_name, from_address = parseaddr(_collapse(sender))
+    html: str | None = None
+    if _HTML_HINT.search(body):
+        html = body[:MAX_BODY_LENGTH]
+        text = html_to_text(html)[:MAX_BODY_LENGTH]
+    else:
+        text = _normalize_text(body)[:MAX_BODY_LENGTH]
+    return MailMessage(
+        message_id=_fallback_message_id(f"{subject}\n{sender}\n{body}".encode()),
+        subject=_collapse(subject),
+        text=text,
+        html=html,
+        from_address=from_address.strip().lower(),
+        from_name=_collapse(from_name) or None,
+    )
+
+
 def parse_mail(raw: bytes, *, uid: int | None = None, folder: str | None = None) -> MailMessage:
     """Eine Rohmail in das Format bringen, mit dem Carrier-Plugins arbeiten.
 

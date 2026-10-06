@@ -19,7 +19,7 @@ from ..dates import parse_eta
 from ..mail import MailMessage
 from ..merge import build_shipment_id
 from ..models import Shipment, ShipmentEvent, ShipmentStatus, SourceRecord
-from ..tracking import find_tracking_numbers
+from ..tracking import ChecksumResult, find_tracking_numbers, iter_candidates
 from .rules import CarrierRules, StatusRule
 
 # Gewichte der Trefferbewertung. Der Absender ist das staerkste Signal, ein
@@ -140,6 +140,19 @@ def extract_tracking_numbers(rules: CarrierRules, mail: MailMessage) -> list[str
         schemes=rules.checksum,
         require_context=rules.require_context,
     )
+
+
+def check_tracking_number(rules: CarrierRules, number: str) -> ChecksumResult | None:
+    """Pruefen, ob eine einzelne, normalisierte Nummer zu diesen Regeln passt.
+
+    Dieselben Muster und Pruefverfahren wie bei der Mailauswertung, nur ohne
+    Kontextpruefung — eine von Hand eingegebene Nummer hat kein Umfeld.
+    `None` heisst: Kein Muster erfasst die Nummer vollstaendig.
+    """
+    for candidate in iter_candidates(number, rules.tracking_patterns, schemes=rules.checksum):
+        if candidate.number == number:
+            return candidate.checksum
+    return None
 
 
 def build_shipments_from_rules(

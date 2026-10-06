@@ -312,7 +312,13 @@ class AddressMatcher:
         return best
 
     def match_shipment(self, shipment: Shipment) -> DestinationMatch:
-        """Eine Sendung anhand ihrer gespeicherten Adressdaten bewerten."""
+        """Eine Sendung anhand ihrer gespeicherten Adressdaten bewerten.
+
+        Ein vom Nutzer festgelegter Zielort gewinnt, solange es ihn gibt.
+        """
+        override = shipment.destination_override
+        if override and any(rules.destination.id == override for rules in self._rules):
+            return DestinationMatch(override, hits=("override",))
         return self.match(shipment.destination_raw, shipment.recipient_emails)
 
     def assign(self, shipment: Shipment) -> bool:

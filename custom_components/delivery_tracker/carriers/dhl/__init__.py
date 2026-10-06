@@ -20,8 +20,9 @@ from typing import Final, Self
 
 from ...mail import MailMessage
 from ...models import Shipment
+from ...tracking import ChecksumResult
 from ..base import RulesCarrier
-from ..helpers import build_shipments_from_rules, score_mail
+from ..helpers import build_shipments_from_rules, check_tracking_number, score_mail
 from ..rules import RULES_FILENAME, CarrierRules, load_rules
 
 # Der zweite Regelsatz neben der `rules.yaml`.
@@ -91,6 +92,15 @@ class DhlCarrier(RulesCarrier):
         if _LETTER_NUMBER.match(tracking_number.strip()):
             return self.letter_rules.tracking_url(tracking_number)
         return self.rules.tracking_url(tracking_number)
+
+    def check_tracking_number(self, number: str) -> ChecksumResult | None:
+        """Beide Regelsaetze befragen; eine stimmende Pruefziffer gewinnt."""
+        results = [
+            check_tracking_number(rules, number) for rules in (self.rules, self.letter_rules)
+        ]
+        if ChecksumResult.VALID in results:
+            return ChecksumResult.VALID
+        return next((result for result in results if result is not None), None)
 
 
 PLUGIN = DhlCarrier.from_directory(Path(__file__).parent)
