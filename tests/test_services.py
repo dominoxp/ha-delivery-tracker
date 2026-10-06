@@ -106,7 +106,7 @@ def api_sources() -> Any:
     """Die Fabrik fuer 17track durch das Fake ersetzen; liefert die erzeugten Quellen."""
     created: list[FakeApiSource] = []
 
-    def _factory(hass: HomeAssistant, data: Mapping[str, Any]) -> TrackingSource:
+    def _factory(hass: HomeAssistant, data: Mapping[str, Any], context: Any) -> TrackingSource:
         source = FakeApiSource()
         created.append(source)
         return source

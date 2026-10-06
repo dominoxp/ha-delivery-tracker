@@ -9,12 +9,16 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
-from typing import Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant
 
 from ..merge import source_priority
 from ..models import Shipment
+
+if TYPE_CHECKING:
+    from ..carriers import CarrierRegistry
 
 
 class SourceError(Exception):
@@ -37,6 +41,20 @@ class SourceQuotaError(SourcePermanentError):
     """
 
 
+class SourceRateLimitError(SourceError):
+    """Der Dienst drosselt die Anfragen — voruebergehend, die Quelle wartet ab."""
+
+
+@dataclass(frozen=True, slots=True)
+class SourceContext:
+    """Was eine API-Quelle ueber den Rest der Integration wissen darf."""
+
+    known_shipments: Callable[[], list[Shipment]]
+    """Der aktuelle Bestand des Stores — daraus erfaehrt die API von neuen Nummern."""
+    registry: CarrierRegistry | None = None
+    """Die aktiven Carrier-Plugins, fuer die Pruefung und Zuordnung von Nummern."""
+
+
 class TrackingSource(ABC):
     """Basisklasse fuer E-Mail-, API- und kuenftige Quellen."""
 
@@ -48,6 +66,21 @@ class TrackingSource(ABC):
         """
         self.source_id = source_id
         self.priority = source_priority(source_id) if priority is None else priority
+
+    @property
+    def warning(self) -> SourceError | None:
+        """Ein Fehler, mit dem die Quelle eingeschraenkt weiterlaeuft.
+
+        Anders als eine Exception aus `async_fetch` kommen die Ergebnisse
+        trotzdem an — etwa wenn das Kontingent fuer neue Nummern aufgebraucht
+        ist, bekannte aber weiter abgefragt werden. Der Coordinator macht
+        daraus einen Repairs-Eintrag.
+        """
+        return None
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Zustand fuer den Diagnostics-Download; ohne Zugangsdaten."""
+        return {}
 
     async def async_setup(self) -> None:  # noqa: B027 — bewusst optionaler Haken
         """Verbindungen aufbauen und Konfiguration pruefen.
@@ -73,9 +106,10 @@ class TrackingSource(ABC):
         return f"<{type(self).__name__} {self.source_id} prio={self.priority}>"
 
 
-ApiSourceFactory = Callable[[HomeAssistant, Mapping[str, Any]], TrackingSource]
+ApiSourceFactory = Callable[[HomeAssistant, Mapping[str, Any], SourceContext], TrackingSource]
 """Baut eine API-Quelle aus den Daten ihres `api_source`-Subentrys."""
 
 API_SOURCE_FACTORIES: dict[str, ApiSourceFactory] = {}
-"""Fabriken je Quellentyp (`CONF_SOURCE_TYPE`). Step 3.1 traegt 17track hier ein;
-ein Subentry ohne Fabrik wird beim Setup als Fehler der Quelle vermerkt."""
+"""Fabriken je Quellentyp (`CONF_SOURCE_TYPE`); die Quellen tragen sich beim
+Import selbst ein. Ein Subentry ohne Fabrik wird beim Setup als Fehler der
+Quelle vermerkt."""

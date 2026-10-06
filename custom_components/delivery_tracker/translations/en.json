@@ -175,6 +175,7 @@
       },
       "error": {
         "invalid_api_key": "The API key is invalid.",
+        "cannot_connect": "The service cannot be reached.",
         "unknown": "Unexpected error, see the log for details."
       },
       "abort": {
@@ -443,7 +444,7 @@
     },
     "api_quota_exhausted": {
       "title": "Quota of {source} used up",
-      "description": "The request quota of the API key for {source} is used up. The source is paused so the quota is not strained further; emails are still processed.\n\nGo to **Settings → Devices & services → Delivery Tracker**, open the menu of the API source {source}, choose **Reconfigure** and either enter a different key or choose a longer polling interval. The source is queried again after saving.\n\nThis notice disappears as soon as the source has been queried successfully again."
+      "description": "The quota of the API key for {source} is used up. New tracking numbers are not registered for now; shipments that are already registered are still queried, and emails are still processed.\n\nEither wait until {source} renews the quota, or go to **Settings → Devices & services → Delivery Tracker**, open the menu of the API source {source}, choose **Reconfigure** and enter a different key.\n\nThis notice disappears as soon as quota is available again or no number is waiting to be registered."
     }
   }
 }

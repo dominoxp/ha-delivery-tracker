@@ -1,0 +1,55 @@
+{
+  "shipping_info": {
+    "shipper_address": {"country": "DE", "city": null},
+    "recipient_address": {"country": "DE", "city": null}
+  },
+  "latest_status": {
+    "status": "InTransit",
+    "sub_status": "InTransit_Arrival",
+    "sub_status_descr": null
+  },
+  "latest_event": {
+    "time_iso": "2026-07-29T06:12:00+02:00",
+    "time_utc": "2026-07-29T04:12:00Z",
+    "description": "Die Sendung wurde im Start-Paketzentrum bearbeitet.",
+    "location": "Hamburg",
+    "stage": "Arrival",
+    "sub_status": "InTransit_Arrival"
+  },
+  "time_metrics": {
+    "days_after_order": 1,
+    "days_of_transit": 1,
+    "days_after_last_update": 0,
+    "estimated_delivery_date": {
+      "source": "Official",
+      "from": "2026-07-30T08:00:00Z",
+      "to": "2026-07-30T16:00:00Z"
+    }
+  },
+  "tracking": {
+    "providers_hash": 123456,
+    "providers": [
+      {
+        "provider": {"key": 7041, "name": "DHL Paket", "country": "DE"},
+        "events": [
+          {
+            "time_iso": "2026-07-29T06:12:00+02:00",
+            "time_utc": "2026-07-29T04:12:00Z",
+            "description": "Die Sendung wurde im Start-Paketzentrum bearbeitet.",
+            "location": "Hamburg",
+            "stage": "Arrival",
+            "sub_status": "InTransit_Arrival"
+          },
+          {
+            "time_iso": "2026-07-28T18:40:00+02:00",
+            "time_utc": "2026-07-28T16:40:00Z",
+            "description": "Die Sendung wurde vom Absender in der Filiale eingeliefert.",
+            "location": {"country": "DE", "state": null, "city": "Bremen"},
+            "stage": "PickedUp",
+            "sub_status": "InTransit_PickedUp"
+          }
+        ]
+      }
+    ]
+  }
+}

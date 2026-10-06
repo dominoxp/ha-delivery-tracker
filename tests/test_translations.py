@@ -100,6 +100,7 @@ def test_flow_keys_exist_in_strings() -> None:
         f"{base}.{SUBENTRY_DESTINATION}.error.{config_flow.ERROR_NO_RULES}",
         f"{base}.{SUBENTRY_DESTINATION}.abort.reconfigure_successful",
         f"{base}.{SUBENTRY_API_SOURCE}.error.{config_flow.ERROR_INVALID_API_KEY}",
+        f"{base}.{SUBENTRY_API_SOURCE}.error.{config_flow.ERROR_CANNOT_CONNECT}",
         f"{base}.{SUBENTRY_API_SOURCE}.error.{config_flow.ERROR_UNKNOWN}",
         f"{base}.{SUBENTRY_API_SOURCE}.abort.{config_flow.ABORT_ALREADY_CONFIGURED}",
         f"{base}.{SUBENTRY_API_SOURCE}.abort.reconfigure_successful",

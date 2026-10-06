@@ -77,8 +77,10 @@ from .sources import (
     ImapProgress,
     ImapSource,
     SourceAuthError,
+    SourceContext,
     SourcePermanentError,
     SourceQuotaError,
+    SourceRateLimitError,
     TrackingSource,
 )
 from .store import ShipmentStore
@@ -424,8 +426,11 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 handle, SourceState.FAILED, f"Quellentyp {source_type!r} wird nicht unterstuetzt"
             )
             return handle
+        context = SourceContext(
+            known_shipments=lambda: self.store.shipments, registry=self._registry
+        )
         try:
-            handle.source = factory(self.hass, subentry.data)
+            handle.source = factory(self.hass, subentry.data, context)
         except Exception as err:
             _LOGGER.exception("API-Quelle %s liess sich nicht anlegen", subentry.title)
             self._mark_failed(handle, SourceState.FAILED, str(err) or type(err).__name__)
@@ -624,6 +629,11 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
             handle.issue = _permanent_issue(err)
             _LOGGER.error("%s: %s — die Quelle ruht bis zur Korrektur", handle.title, err)
             return []
+        except SourceRateLimitError as err:
+            # Drosselung ist kein Defekt: Die Quelle wartet ihren Backoff ab, kein Repairs-Eintrag.
+            _LOGGER.debug("%s: gedrosselt: %s", handle.title, err)
+            self._mark_failed(handle, SourceState.ERROR, str(err) or type(err).__name__)
+            return []
         except Exception as err:
             if handle.state is not SourceState.ERROR:
                 _LOGGER.warning("%s: Abruf fehlgeschlagen: %s", handle.title, err or repr(err))
@@ -635,7 +645,12 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
         if handle.state is SourceState.ERROR:
             _LOGGER.info("%s: Abruf funktioniert wieder", handle.title)
         handle.state = SourceState.OK
-        handle.issue = None
+        # Eine Quelle kann eingeschraenkt weiterlaufen (17TRACK ohne Kontingent):
+        # Die Ergebnisse kommen an, der Hinweis bleibt trotzdem stehen.
+        warning = source.warning
+        handle.issue = (
+            _permanent_issue(warning) if isinstance(warning, SourcePermanentError) else None
+        )
         handle.failures = 0
         handle.last_success = now
         return shipments

@@ -1,0 +1,55 @@
+# Zuordnung zwischen 17TRACK und dieser Integration (API v2.4).
+#
+# Gelesen von `seventeentrack_source.py`. Neue Zusteller oder geaenderte Codes
+# kommen hier dazu, ohne den Code anzufassen.
+
+# Eigene Carrier-ID -> 17TRACK-Carrier-Codes.
+# Quelle: https://res.17track.net/asset/carrier/info/apicarrier.all.json
+# Der erste Code wird beim Registrieren mitgeschickt; alle Codes gelten in
+# Gegenrichtung als dieser Zusteller. Zusteller ohne Eintrag ueberlaesst die
+# Registrierung der automatischen Erkennung von 17TRACK.
+carriers:
+  dhl:
+    - 7041     # DHL Paket
+    - 100001   # DHL Express
+    - 7044     # Deutsche Post Mail
+  dpd:
+    - 100007   # DPD (Germany)
+  gls:
+    - 100005   # GLS
+  hermes:
+    - 100018   # Hermes (Germany)
+  ups:
+    - 100002   # UPS
+  amazon:
+    - 100308   # Amazon Shipping
+
+# Hauptstatus von 17TRACK -> `ShipmentStatus`.
+statuses:
+  NotFound: unknown
+  InfoReceived: label_created
+  InTransit: in_transit
+  # Lange ohne Neuigkeit: kein neuer Stand, der eigene bleibt stehen.
+  Expired: unknown
+  AvailableForPickup: ready_for_pickup
+  OutForDelivery: out_for_delivery
+  DeliveryFailure: delivery_failed
+  Delivered: delivered
+  Exception: delayed
+
+# Feinere Unterstatus gehen dem Hauptstatus vor.
+sub_statuses:
+  InTransit_CustomsProcessing: customs
+  InTransit_CustomsRequiringInformation: customs
+  # Niemand angetroffen ist kein Ende: Es folgt ein neuer Versuch oder die Filiale.
+  DeliveryFailure_NoBody: delayed
+  Exception_NoBody: delayed
+  Exception_Delayed: delayed
+  Exception_Security: customs
+  Exception_Returning: returned
+  Exception_Returned: returned
+  Exception_Rejected: returned
+  Exception_Damage: delivery_failed
+  Exception_Lost: delivery_failed
+  Exception_Destroyed: delivery_failed
+  Exception_Cancel: delivery_failed

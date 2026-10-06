@@ -14,6 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.delivery_tracker.const import (
     DESTINATION_UNKNOWN,
@@ -27,8 +28,7 @@ from custom_components.delivery_tracker.const import (
 from custom_components.delivery_tracker.entry import destination_device_identifier
 from custom_components.delivery_tracker.models import Shipment, ShipmentStatus
 from tests.fake_imap import FakeImapServer
-
-VALID_API_KEY = "0123456789ABCDEF0123456789ABCDEF"
+from tests.fake_seventeentrack import VALID_API_KEY, FakeSeventeenTrack
 
 ZUHAUSE = ConfigSubentryData(
     data={
@@ -46,6 +46,14 @@ ZUHAUSE = ConfigSubentryData(
 # ----------------------------------------------------------------------
 # Fixtures und Hilfen
 # ----------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def seventeentrack(aioclient_mock: AiohttpClientMocker) -> FakeSeventeenTrack:
+    """Fake der 17TRACK-API — Schluesselpruefung und die danach geladene Quelle."""
+    fake = FakeSeventeenTrack()
+    fake.install(aioclient_mock)
+    return fake
 
 
 @pytest.fixture
@@ -532,6 +540,37 @@ async def test_api_source_schluessel_wird_geprueft(
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+
+
+async def test_api_source_schluessel_wird_bei_17track_geprueft(
+    hass: HomeAssistant, setup_integration: ConfigEntry, seventeentrack: FakeSeventeenTrack
+) -> None:
+    """Formal gueltig, aber abgelehnt; Dienst nicht erreichbar; dann angenommen."""
+    entry = setup_integration
+    result = await start_subentry_flow(hass, entry, SUBENTRY_API_SOURCE)
+    wrong = "F" * 32
+    result = await configure_subentry(
+        hass, result, {"source_type": "seventeentrack", "api_key": wrong, "scan_interval": 1800}
+    )
+    assert result["errors"] == {"base": "invalid_api_key"}
+    assert seventeentrack.paths() == ["getquota"]
+    assert wrong not in str(result)
+
+    seventeentrack.broken = True
+    result = await configure_subentry(
+        hass,
+        result,
+        {"source_type": "seventeentrack", "api_key": VALID_API_KEY, "scan_interval": 1800},
+    )
+    assert result["errors"] == {"base": "cannot_connect"}
+
+    seventeentrack.broken = False
+    result = await configure_subentry(
+        hass,
+        result,
+        {"source_type": "seventeentrack", "api_key": VALID_API_KEY, "scan_interval": 1800},
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
 async def test_api_source_bearbeiten(hass: HomeAssistant, setup_integration: ConfigEntry) -> None:

@@ -1,0 +1,48 @@
+{
+  "latest_status": {
+    "status": "Delivered",
+    "sub_status": "Delivered_Other",
+    "sub_status_descr": null
+  },
+  "latest_event": {
+    "time_iso": "2026-07-30T11:05:00+02:00",
+    "time_utc": "2026-07-30T09:05:00Z",
+    "description": "Die Sendung wurde erfolgreich zugestellt.",
+    "location": "Musterstadt",
+    "stage": "Delivered",
+    "sub_status": "Delivered_Other"
+  },
+  "time_metrics": {
+    "estimated_delivery_date": {"source": null, "from": null, "to": null}
+  },
+  "tracking": {
+    "providers": [
+      {
+        "provider": {"key": 7041, "name": "DHL Paket", "country": "DE"},
+        "events": [
+          {
+            "time_utc": "2026-07-30T09:05:00Z",
+            "description": "Die Sendung wurde erfolgreich zugestellt.",
+            "location": "Musterstadt",
+            "stage": "Delivered",
+            "sub_status": "Delivered_Other"
+          },
+          {
+            "time_utc": "2026-07-30T05:30:00Z",
+            "description": "Die Sendung wurde in das Zustellfahrzeug geladen.",
+            "location": "Musterstadt",
+            "stage": "OutForDelivery",
+            "sub_status": "OutForDelivery_Other"
+          },
+          {
+            "time_utc": "2026-07-29T04:12:00Z",
+            "description": "Die Sendung wurde im Start-Paketzentrum bearbeitet.",
+            "location": "Hamburg",
+            "stage": "Arrival",
+            "sub_status": "InTransit_Arrival"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "latest_status": {
+    "status": "NotFound",
+    "sub_status": "NotFound_Other",
+    "sub_status_descr": null
+  },
+  "latest_event": null,
+  "time_metrics": {
+    "estimated_delivery_date": {"source": null, "from": null, "to": null}
+  },
+  "tracking": {
+    "providers_hash": 0,
+    "providers": []
+  }
+}

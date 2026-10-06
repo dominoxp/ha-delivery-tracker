@@ -2,6 +2,7 @@
 
 from collections.abc import Callable, Generator
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntry
@@ -31,6 +32,16 @@ def auto_enable_custom_integrations(
 ) -> Generator[None]:
     """Custom Integrations in allen Tests laden."""
     yield
+
+
+@pytest.fixture(autouse=True)
+def no_seventeentrack_delay() -> Generator[None]:
+    """Ohne Mindestabstand zwischen den 17TRACK-Anfragen — die Tests sollen schnell sein."""
+    with patch(
+        "custom_components.delivery_tracker.sources.seventeentrack_api.SEVENTEENTRACK_REQUEST_INTERVAL",
+        0,
+    ):
+        yield
 
 
 @pytest.fixture

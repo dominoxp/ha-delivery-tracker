@@ -1,8 +1,8 @@
 """Tests des Coordinators und des Entry-Setups mit echten Quellen.
 
 Postfaecher laufen gegen den Fake-IMAP-Server aus `fake_imap`, API-Quellen
-sind ein kleines Fake ueber `API_SOURCE_FACTORIES` — die echte 17track-Quelle
-kommt erst in Step 3.1.
+sind ein kleines Fake ueber `API_SOURCE_FACTORIES`. Die echte 17TRACK-Quelle
+testet `test_seventeentrack`.
 """
 
 import asyncio
@@ -100,7 +100,7 @@ def api_sources() -> Any:
     """Die Fabrik fuer 17track durch das Fake ersetzen; liefert die erzeugten Quellen."""
     created: list[FakeApiSource] = []
 
-    def _factory(hass: HomeAssistant, data: Mapping[str, Any]) -> TrackingSource:
+    def _factory(hass: HomeAssistant, data: Mapping[str, Any], context: Any) -> TrackingSource:
         source = FakeApiSource()
         created.append(source)
         return source
@@ -239,8 +239,8 @@ async def test_kaputte_quelle_reisst_die_anderen_nicht_mit(
     imap_server.add_message(email_fixture(DHL_MAIL))
     real_factory = API_SOURCE_FACTORIES[SOURCE_SEVENTEENTRACK]
 
-    def _broken(hass: HomeAssistant, data: Mapping[str, Any]) -> TrackingSource:
-        source = real_factory(hass, data)
+    def _broken(hass: HomeAssistant, data: Mapping[str, Any], context: Any) -> TrackingSource:
+        source = real_factory(hass, data, context)
         assert isinstance(source, FakeApiSource)
         source.error = RuntimeError("API kaputt")
         return source

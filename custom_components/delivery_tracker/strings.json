@@ -175,6 +175,7 @@
       },
       "error": {
         "invalid_api_key": "Der API-Schlüssel ist ungültig.",
+        "cannot_connect": "Der Dienst ist nicht erreichbar.",
         "unknown": "Unerwarteter Fehler, Details stehen im Log."
       },
       "abort": {
@@ -443,7 +444,7 @@
     },
     "api_quota_exhausted": {
       "title": "Kontingent von {source} aufgebraucht",
-      "description": "Das Abfragekontingent des API-Schlüssels für {source} ist aufgebraucht. Die Quelle ruht, damit es nicht weiter belastet wird; Mails werden weiterhin ausgewertet.\n\nEntweder unter **Einstellungen → Geräte & Dienste → Delivery Tracker** bei der API-Quelle {source} im Menü **Neu konfigurieren** einen anderen Schlüssel eingeben oder ein größeres Abfrageintervall wählen. Nach dem Speichern wird die Quelle wieder abgefragt.\n\nDieser Hinweis verschwindet, sobald die Quelle wieder abgefragt wurde."
+      "description": "Das Kontingent des API-Schlüssels für {source} ist aufgebraucht. Neue Trackingnummern werden vorerst nicht angemeldet; bereits angemeldete Sendungen werden weiter abgefragt, und Mails werden weiterhin ausgewertet.\n\nEntweder warten, bis {source} das Kontingent erneuert, oder unter **Einstellungen → Geräte & Dienste → Delivery Tracker** bei der API-Quelle {source} im Menü **Neu konfigurieren** einen anderen Schlüssel eingeben.\n\nDieser Hinweis verschwindet, sobald wieder Kontingent vorhanden ist oder keine Nummer mehr auf ihre Anmeldung wartet."
     }
   }
 }

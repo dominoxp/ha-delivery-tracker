@@ -6,7 +6,7 @@ mit, eine eigene Listenverwaltung gibt es deshalb nicht:
 
 * `mailbox`: ein IMAP-Postfach, mit Verbindungstest und Ordnerauswahl,
 * `destination`: ein Zielort mit seinen Match-Regeln (bekommt ein eigenes Device),
-* `api_source`: eine Tracking-API; das Geruest steht, Leben kommt in Step 3.1.
+* `api_source`: eine Tracking-API, deren Schluessel beim Anlegen gegen die API geprueft wird.
 
 Die globalen Einstellungen stehen in den Options des Hub-Entries. Jede Aenderung
 an Subentries oder Options laedt den Entry ueber den Update-Listener aus
@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 import voluptuous as vol
@@ -36,6 +36,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
@@ -102,6 +103,11 @@ from .sources.imap_source import (
     ImapSecurity,
     ImapSource,
     MailFolder,
+)
+from .sources.seventeentrack_api import (
+    SeventeenTrackAuthError,
+    SeventeenTrackClient,
+    SeventeenTrackError,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -585,17 +591,28 @@ class DestinationSubentryFlow(ConfigSubentryFlow):
 # ----------------------------------------------------------------------
 
 
-async def _async_validate_seventeentrack_key(hass: HomeAssistant, api_key: str) -> bool:
-    """Formale Pruefung eines 17track-Schluessels.
+async def _async_validate_seventeentrack_key(hass: HomeAssistant, api_key: str) -> str | None:
+    """Einen 17TRACK-Schluessel pruefen. Liefert ggf. einen Fehlerschluessel.
 
-    Step 3.1 ersetzt das durch eine echte Anfrage gegen die API; bis dahin
-    faengt die Pruefung wenigstens Tippfehler wie Leerzeichen ab.
+    Tippfehler wie Leerzeichen fallen ohne Anfrage durch; sonst fragt die
+    Pruefung das Kontingent ab — das kostet nichts und scheitert an einem
+    ungueltigen Schluessel.
     """
-    return len(api_key) >= 16 and not any(char.isspace() for char in api_key)
+    if len(api_key) < 16 or any(char.isspace() for char in api_key):
+        return ERROR_INVALID_API_KEY
+    client = SeventeenTrackClient(async_get_clientsession(hass), api_key)
+    try:
+        async with asyncio.timeout(CONNECTION_TEST_TIMEOUT):
+            await client.async_get_quota()
+    except SeventeenTrackAuthError:
+        return ERROR_INVALID_API_KEY
+    except SeventeenTrackError, TimeoutError:
+        return ERROR_CANNOT_CONNECT
+    return None
 
 
 # Pruefung des API-Schluessels je Quellentyp. Neue Quellen tragen sich hier ein.
-API_KEY_VALIDATORS = {
+API_KEY_VALIDATORS: dict[str, Callable[[HomeAssistant, str], Awaitable[str | None]]] = {
     SOURCE_SEVENTEENTRACK: _async_validate_seventeentrack_key,
 }
 
@@ -610,11 +627,10 @@ async def async_validate_api_key(hass: HomeAssistant, source_type: str, api_key:
     if validator is None:
         return ERROR_UNKNOWN
     try:
-        valid = await validator(hass, api_key)
+        return await validator(hass, api_key)
     except Exception:
         _LOGGER.exception("Unerwarteter Fehler bei der Pruefung des %s-Schluessels", source_type)
         return ERROR_UNKNOWN
-    return None if valid else ERROR_INVALID_API_KEY
 
 
 class ApiSourceSubentryFlow(ConfigSubentryFlow):

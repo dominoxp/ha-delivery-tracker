@@ -163,6 +163,9 @@ def _source_diagnostics(handle: SourceHandle) -> dict[str, Any]:
     }
     if isinstance(handle.source, ImapSource):
         result["imap"] = handle.source.diagnostics()
+    elif handle.source is not None and (details := handle.source.diagnostics()):
+        # API-Quellen: u.a. das verbleibende Kontingent.
+        result["api"] = details
     if handle.pipeline is not None:
         result["mail_stats"] = handle.pipeline.stats.to_dict()
     return result

@@ -112,6 +112,21 @@ IMAP_BACKOFF_START: Final = 5.0
 IMAP_BACKOFF_MAX: Final = 300.0
 IMAP_BACKOFF_FACTOR: Final = 2.0
 
+# 17TRACK (Step 3.1), API v2.4.
+SEVENTEENTRACK_API_URL: Final = "https://api.17track.net/track/v2.4"
+# Hoechstzahl an Nummern je Anfrage (Vorgabe der API).
+SEVENTEENTRACK_BATCH_SIZE: Final = 40
+# Die API erlaubt drei Anfragen je Sekunde; etwas Abstand haelt den Takt sicher darunter.
+SEVENTEENTRACK_REQUEST_INTERVAL: Final = 0.4
+SEVENTEENTRACK_REQUEST_TIMEOUT: Final = 30.0
+# Obergrenze beim Blaettern durch die Liste der registrierten Nummern (je 40).
+SEVENTEENTRACK_MAX_PAGES: Final = 25
+# Drosselung: zunaechst eine Minute Pause, bei jeder weiteren Drosselung doppelt so lang.
+SEVENTEENTRACK_BACKOFF_START: Final = 60.0
+SEVENTEENTRACK_BACKOFF_MAX: Final = 3600.0
+# Eine abgelehnte Registrierung wird fruehestens nach einem Tag wiederholt.
+SEVENTEENTRACK_REJECT_RETRY: Final = 86400.0
+
 # Obergrenze der Event-Historie je Sendung, damit der Store nicht unbegrenzt waechst.
 MAX_EVENTS_PER_SHIPMENT: Final = 50
 

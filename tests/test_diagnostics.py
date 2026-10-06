@@ -76,7 +76,7 @@ async def imap_server() -> AsyncGenerator[FakeImapServer]:
 def api_source() -> Any:
     """17track durch das Fake ersetzen."""
 
-    def _factory(hass: HomeAssistant, data: Mapping[str, Any]) -> TrackingSource:
+    def _factory(hass: HomeAssistant, data: Mapping[str, Any], context: Any) -> TrackingSource:
         return FakeApiSource()
 
     with patch.dict(API_SOURCE_FACTORIES, {SOURCE_SEVENTEENTRACK: _factory}):

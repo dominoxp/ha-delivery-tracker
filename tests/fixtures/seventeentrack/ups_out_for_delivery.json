@@ -1,0 +1,45 @@
+{
+  "latest_status": {
+    "status": "OutForDelivery",
+    "sub_status": "OutForDelivery_Other",
+    "sub_status_descr": null
+  },
+  "latest_event": {
+    "time_iso": "2026-07-30T07:45:00+02:00",
+    "time_utc": "2026-07-30T05:45:00Z",
+    "description": "Out For Delivery Today",
+    "location": "Koeln, DE",
+    "stage": "OutForDelivery",
+    "sub_status": "OutForDelivery_Other"
+  },
+  "time_metrics": {
+    "estimated_delivery_date": {
+      "source": "Official",
+      "from": "2026-07-30T08:00:00Z",
+      "to": "2026-07-30T17:00:00Z"
+    }
+  },
+  "tracking": {
+    "providers": [
+      {
+        "provider": {"key": 100002, "name": "UPS", "country": "US"},
+        "events": [
+          {
+            "time_utc": "2026-07-30T05:45:00Z",
+            "description": "Out For Delivery Today",
+            "location": "Koeln, DE",
+            "stage": "OutForDelivery",
+            "sub_status": "OutForDelivery_Other"
+          },
+          {
+            "time_utc": "2026-07-29T21:10:00Z",
+            "description": "Import Scan",
+            "location": "Koeln, DE",
+            "stage": "Arrival",
+            "sub_status": "InTransit_CustomsProcessing"
+          }
+        ]
+      }
+    ]
+  }
+}

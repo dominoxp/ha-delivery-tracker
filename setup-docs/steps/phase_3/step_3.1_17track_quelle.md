@@ -54,9 +54,9 @@ E-Mails bekommen einen echten Live-Status, auch wenn keine weitere Mail mehr kom
 
 ## Checkliste
 
-- [ ] seventeentrack_source.py mit Registrieren, Abfragen, Abmelden
-- [ ] Status- und Carrier-Zuordnung als eigene Datei
-- [ ] Kontingent-Schonung: nur aktive Sendungen, Bündelung, Mindestintervall
-- [ ] Unterscheidbare Fehlerbehandlung mit Backoff und Repair
-- [ ] api_source-Subentry aktiviert, Kontingent in den Diagnostics
-- [ ] Tests gegen Fixtures grün
+- [x] seventeentrack_source.py mit Registrieren, Abfragen, Abmelden
+- [x] Status- und Carrier-Zuordnung als eigene Datei
+- [x] Kontingent-Schonung: nur aktive Sendungen, Bündelung, Mindestintervall
+- [x] Unterscheidbare Fehlerbehandlung mit Backoff und Repair
+- [x] api_source-Subentry aktiviert, Kontingent in den Diagnostics
+- [x] Tests gegen Fixtures grün
