@@ -12,7 +12,8 @@ dist/
 
 # Card-Toolchain
 card/node_modules/
-card/dist/
+# Build der Karte; kommt im Release ueber release.yml ins ZIP.
+custom_components/delivery_tracker/frontend/
 
 # Echte Mails und ihre Klartext-Fassung. Sie tragen Namen, Adressen und die
 # personalisierten Tokens der Versanddienstleister — anonymisiert wird beim

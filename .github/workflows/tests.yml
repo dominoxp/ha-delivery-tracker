@@ -31,3 +31,30 @@ jobs:
 
       - name: pytest
         run: uv run pytest -q
+
+  card:
+    name: Karte (lint + vitest + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: card
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: card/package-lock.json
+
+      - name: Abhaengigkeiten installieren
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Vitest
+        run: npm test
+
+      - name: Build
+        run: npm run build

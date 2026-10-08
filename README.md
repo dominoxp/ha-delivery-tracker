@@ -26,8 +26,31 @@ ausliest, den Zusteller erkennt und den Sendungsstand in Home Assistant bereitst
 
 ## Manuelle Installation
 
-Den Ordner `custom_components/delivery_tracker` in das HA-Konfigurationsverzeichnis unter
-`custom_components/` kopieren und Home Assistant neu starten.
+Das ZIP aus dem neuesten [Release](https://github.com/dominoxp/ha-delivery-tracker/releases)
+nach `custom_components/delivery_tracker/` im HA-Konfigurationsverzeichnis entpacken und
+Home Assistant neu starten. Das Release enthält die fertig gebaute Lovelace-Karte; wer
+stattdessen den Ordner aus einem Git-Checkout kopiert, muss die Karte vorher selbst bauen
+(siehe [Entwicklung](#entwicklung)).
+
+## Lovelace-Karte
+
+Die Integration bringt ihre Karte mit und liefert sie selbst aus — weder eine eigene
+HACS-Installation noch ein Eintrag unter den Dashboard-Ressourcen ist nötig. Nach dem
+Neustart von Home Assistant (und einem Neuladen der Seite im Browser) steht
+**Delivery Tracker** in der Kartenauswahl des Dashboards.
+
+```yaml
+type: custom:delivery-tracker-card
+entity: sensor.delivery_tracker_aktive_sendungen # ein Sensor der Integration
+title: Pakete # optional, sonst der Name der Entity
+```
+
+`entity` muss ein Sensor der Integration sein, also einer mit dem Attribut `shipments`.
+Bei ungültiger Konfiguration zeigt die Karte statt einer leeren Fläche eine Fehlermeldung.
+
+Die Karte wird unter `/delivery_tracker/delivery-tracker-card.js` ausgeliefert. Wer sie
+trotzdem zusätzlich als Ressource einträgt, richtet keinen Schaden an — sie registriert
+sich nur einmal.
 
 ## Entwicklung
 
@@ -37,8 +60,23 @@ uv pip install -e ".[dev]"
 check.cmd
 ```
 
-`check.cmd` ist das einzige Qualitäts-Gate: `ruff format` → `ruff check` → `pytest`.
-Mit `check.cmd --fix` werden zusätzlich behebbare Lint-Fehler korrigiert.
+`check.cmd` ist das einzige Qualitäts-Gate: `ruff format` → `ruff check` → `pytest` →
+Karte (`prettier` → `eslint` → `vitest` → `vite build`). Mit `check.cmd --fix` werden
+zusätzlich behebbare Lint-Fehler korrigiert.
+
+**Karte:** Die Node-Toolchain liegt vollständig unter [card/](card/) (TypeScript, Lit,
+Vite; Node 24). `check.cmd` installiert die Abhängigkeiten beim ersten Lauf selbst und
+baut die Karte nach `custom_components/delivery_tracker/frontend/` — dieser Ordner ist
+nicht eingecheckt, das Release baut ihn neu. Ohne installiertes Node überspringt
+`check.cmd` die Karte mit einem Hinweis, die Python-Prüfungen laufen trotzdem. Einzeln:
+
+```cmd
+cd card
+npm ci
+npm run lint
+npm test
+npm run build
+```
 
 **Tests laufen im Docker-Container.** Home Assistant importiert seit 2025.10 die
 Unix-Module `fcntl` und `resource` und lässt sich deshalb unter Windows nicht mehr

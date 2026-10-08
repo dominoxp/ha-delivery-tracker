@@ -54,10 +54,13 @@ Funktionsumfang, aber vollständig in Build, Release und Qualitäts-Gate eingebu
 
 ## Checkliste
 
-- [ ] card/ mit TypeScript, Lit, Vite, ESLint, Prettier
-- [ ] Registrierung als Custom Element mit customCards-Eintrag
-- [ ] Grundgerüst mit Konfigurationsvalidierung und Fehlerdarstellung
-- [ ] hacs.json und release.yml um die Frontend-Ressource ergänzt
-- [ ] check.cmd um Card-Lint und -Build erweitert
-- [ ] Vitest mit Rendertest
+- [x] card/ mit TypeScript, Lit, Vite, ESLint, Prettier
+- [x] Registrierung als Custom Element mit customCards-Eintrag
+- [x] Grundgerüst mit Konfigurationsvalidierung und Fehlerdarstellung
+- [x] hacs.json und release.yml um die Frontend-Ressource ergänzt — hacs.json bleibt
+  unverändert: HACS liefert bei einer Integration keine Frontend-Dateien aus und kennt dafür
+  keinen Schlüssel. Stattdessen liefert die Integration die Karte selbst aus (`card.py`,
+  statischer Pfad + `add_extra_js_url`); `release.yml` baut sie ins ZIP.
+- [x] check.cmd um Card-Lint und -Build erweitert
+- [x] Vitest mit Rendertest
 - [ ] Manuell in echter HA-Instanz eingebunden, helles und dunkles Theme geprüft

@@ -28,6 +28,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 
 from .addresses import AddressMatcher
+from .card import async_register_card
 from .carriers import async_get_registry
 from .const import DOMAIN, PLATFORMS, SUBENTRY_DESTINATION
 from .coordinator import DeliveryTrackerCoordinator
@@ -50,11 +51,12 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Die Actions registrieren — einmal je HA-Start, nicht je Entry.
+    """Actions und Lovelace-Karte registrieren — einmal je HA-Start, nicht je Entry.
 
     So ueberstehen sie Reloads, und mehrere Entries teilen sich dieselben.
     """
     async_setup_services(hass)
+    await async_register_card(hass)
     return True
 
 

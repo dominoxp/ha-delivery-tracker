@@ -22,10 +22,26 @@ jobs:
           mv manifest.tmp custom_components/delivery_tracker/manifest.json
           echo "Manifest-Version: $version"
 
-      - name: ZIP bauen
-        # Gezippt wird nur der Inhalt des Integrationsordners — setup-docs, card,
-        # tests und CI-Dateien gehoeren nicht ins Release.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: card/package-lock.json
+
+      - name: Karte bauen
+        # Schreibt nach custom_components/delivery_tracker/frontend/ und prueft,
+        # dass genau eine Datei ohne externe Importe entstanden ist.
+        working-directory: card
         run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: ZIP bauen
+        # Gezippt wird nur der Inhalt des Integrationsordners samt gebauter Karte —
+        # setup-docs, die Quellen unter card/, tests und CI-Dateien gehoeren nicht
+        # ins Release.
+        run: |
+          test -f custom_components/delivery_tracker/frontend/delivery-tracker-card.js
           cd custom_components/delivery_tracker
           zip -r delivery_tracker.zip . -x '*.pyc' -x '__pycache__/*'
 

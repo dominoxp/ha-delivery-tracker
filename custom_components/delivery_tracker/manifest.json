@@ -1,6 +1,7 @@
 {
   "domain": "delivery_tracker",
   "name": "Delivery Tracker",
+  "after_dependencies": ["frontend", "http"],
   "codeowners": ["@dominoxp"],
   "config_flow": true,
   "documentation": "https://github.com/dominoxp/ha-delivery-tracker",
