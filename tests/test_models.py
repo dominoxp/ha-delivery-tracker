@@ -148,6 +148,8 @@ def test_as_summary_ist_kompakt():
     assert summary["status"] == "out_for_delivery"
     assert summary["eta_start"] == "2026-07-28T08:00:00+00:00"
     assert summary["destination_id"] == "zuhause"
+    # Die Karte (Step 4.2) zeigt den Abholcode direkt in der Liste.
+    assert summary["pickup_code"] == "9876"
 
 
 def test_shipment_aktiv_und_abgeschlossen():

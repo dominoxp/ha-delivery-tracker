@@ -196,6 +196,20 @@ async def test_attribut_ist_kompakt(hass: HomeAssistant, hass_storage: dict[str,
 
 
 @pytest.mark.usefixtures("berlin")
+async def test_namen_fuer_die_karte(hass: HomeAssistant, hass_storage: dict[str, Any]) -> None:
+    """Jeder Zaehler nennt die aktiven Zusteller und alle Zielorte mit Namen."""
+    store_with(hass_storage, beispieldaten())
+    entry = make_entry(HOME, disabled_carriers=["dpd"])
+    await setup_entry(hass, entry)
+
+    for key in ("active_shipments", "carrier_dhl", "destination_home"):
+        attributes = state_of(hass, entry, key).attributes
+        assert attributes["destinations"] == {"home": "Zuhause"}, key
+        assert attributes["carriers"]["dhl"] == "DHL Paket", key
+        assert "dpd" not in attributes["carriers"], key
+
+
+@pytest.mark.usefixtures("berlin")
 async def test_sensoren_haengen_an_den_richtigen_devices(
     hass: HomeAssistant, hass_storage: dict[str, Any]
 ) -> None:

@@ -301,6 +301,7 @@ class Shipment:
             "sender": self.sender,
             "description": self.description,
             "pickup_location": self.pickup_location,
+            "pickup_code": self.pickup_code,
             "tracking_url": self.tracking_url,
             "last_updated": _dt_to_iso(self.last_updated),
         }

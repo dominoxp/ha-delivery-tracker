@@ -57,11 +57,15 @@ nach Zieladresse oder Status filtert — ohne dass dafür Fremdkarten oder Templ
 
 ## Checkliste
 
-- [ ] Sendungsliste aus dem shipments-Attribut
-- [ ] Filter, Gruppierung, Sortierung, Feldauswahl, Obergrenze
-- [ ] Darstellung inklusive Fortschrittsbalken, Abholort und Tracking-Link
-- [ ] Mitgelieferte Carrier-Symbole, keine externen Ressourcen
-- [ ] Leer- und Fehlerzustand
-- [ ] Visueller Editor für alle Optionen
-- [ ] Vitest-Tests grün
+- [x] Sendungsliste aus dem shipments-Attribut — 2.3 dafür erweitert: `pickup_code` in
+  `as_summary()`, dazu die Attribute `carriers` und `destinations` (Name je ID, vom Recorder
+  ausgenommen) für Beschriftung und Editor-Auswahl
+- [x] Filter, Gruppierung, Sortierung, Feldauswahl, Obergrenze
+- [x] Darstellung inklusive Fortschrittsbalken, Abholort und Tracking-Link
+- [x] Mitgelieferte Carrier-Symbole, keine externen Ressourcen — Kürzel-Plaketten statt Logos
+  (Marken, feste Farben)
+- [x] Leer- und Fehlerzustand
+- [x] Visueller Editor für alle Optionen — native Formularelemente statt `ha-form`, damit keine
+  internen Frontend-Komponenten nötig sind
+- [x] Vitest-Tests grün
 - [ ] Manuell in echter HA-Instanz auf Desktop und Mobilgerät geprüft

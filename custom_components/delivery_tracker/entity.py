@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import ATTR_SHIPMENTS, ATTR_SOURCES
+from .const import ATTR_CARRIERS, ATTR_DESTINATIONS, ATTR_SHIPMENTS, ATTR_SOURCES
 from .coordinator import DeliveryTrackerCoordinator
 from .entry import hub_device_identifier
 
@@ -15,8 +15,11 @@ class DeliveryTrackerEntity(CoordinatorEntity[DeliveryTrackerCoordinator]):
 
     _attr_has_entity_name = True
     # Die Listen aendern sich mit jeder Sendung; sie gehoeren nicht in die
-    # Recorder-Datenbank. Die Historie steckt im Zaehlerwert.
-    _unrecorded_attributes = frozenset({ATTR_SHIPMENTS, ATTR_SOURCES})
+    # Recorder-Datenbank. Die Historie steckt im Zaehlerwert. Die Namenslisten
+    # sind Konfiguration und gehoeren ebenso wenig hinein.
+    _unrecorded_attributes = frozenset(
+        {ATTR_SHIPMENTS, ATTR_SOURCES, ATTR_CARRIERS, ATTR_DESTINATIONS}
+    )
 
     def __init__(self, coordinator: DeliveryTrackerCoordinator, key: str) -> None:
         """Entity am Haupt-Device anlegen."""

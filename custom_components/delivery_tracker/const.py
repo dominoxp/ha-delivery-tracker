@@ -11,9 +11,12 @@ DOMAIN: Final = "delivery_tracker"
 # Plattformen, die beim Entry-Setup geladen werden.
 PLATFORMS: Final[list[Platform]] = [Platform.CALENDAR, Platform.SENSOR]
 
-# Attribute der Sensoren. Beide sind vom Recorder ausgenommen (Step 2.3).
+# Attribute der Sensoren. Alle sind vom Recorder ausgenommen (Step 2.3).
 ATTR_SHIPMENTS: Final = "shipments"
 ATTR_SOURCES: Final = "sources"
+# Anzeigenamen je ID fuer die Karte (Step 4.2): Die Sendungsliste traegt nur IDs.
+ATTR_CARRIERS: Final = "carriers"
+ATTR_DESTINATIONS: Final = "destinations"
 
 # Schluessel und Version des Storage-Files unter .storage/.
 STORAGE_KEY: Final = f"{DOMAIN}.shipments"

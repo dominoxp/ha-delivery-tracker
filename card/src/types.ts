@@ -15,6 +15,8 @@ export interface HassEntity {
 export interface HomeAssistant {
   states: Record<string, HassEntity | undefined>;
   locale: { language: string };
+  /** Server-Konfiguration; `time_zone` ist die HA-Zeitzone (IANA-Name). */
+  config?: { time_zone?: string };
 }
 
 /** Eintrag fuer die Kartenauswahl der Oberflaeche. */

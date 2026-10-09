@@ -8,7 +8,8 @@ Bewusst keine Entity pro Sendung (siehe `planning.md`). Stattdessen:
 - je Zielort ein Zaehler an dessen Device.
 
 Jeder Zaehler traegt seine Sendungen als Attribut `shipments` — die Liste aus
-`Shipment.as_summary()`, ohne Event-Historie. **Sortierung** wie ueberall in
+`Shipment.as_summary()`, ohne Event-Historie — sowie die Anzeigenamen der
+Zusteller (`carriers`) und Zielorte (`destinations`) je ID. **Sortierung** wie ueberall in
 `CoordinatorData` (`coordinator.shipment_sort_key`): Sendungen mit Termin nach
 `eta_start` aufsteigend, danach die ohne Termin, juengste Aenderung zuerst;
 die ID entscheidet Gleichstaende. Die Karte aus Step 4.2 verlaesst sich darauf.
@@ -39,7 +40,13 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.util import dt as dt_util
 
-from .const import ATTR_SHIPMENTS, ATTR_SOURCES, SUBENTRY_DESTINATION
+from .const import (
+    ATTR_CARRIERS,
+    ATTR_DESTINATIONS,
+    ATTR_SHIPMENTS,
+    ATTR_SOURCES,
+    SUBENTRY_DESTINATION,
+)
 from .coordinator import CoordinatorData, DeliveryTrackerCoordinator, SourceState
 from .entity import DeliveryTrackerEntity
 from .entry import (
@@ -182,8 +189,20 @@ class ShipmentListSensor(DeliveryTrackerEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Die kompakte Sendungsliste — ohne Event-Historie und Rohtexte."""
-        return {ATTR_SHIPMENTS: [shipment.as_summary() for shipment in self.shipments()]}
+        """Die kompakte Sendungsliste — ohne Event-Historie und Rohtexte.
+
+        Dazu die Namen der aktiven Zusteller und aller Zielorte: Die Karte
+        beschriftet damit Sendungen und Gruppen und bietet sie im Editor als
+        Filter an, auch wenn gerade keine Sendung dorthin unterwegs ist.
+        """
+        runtime = self.coordinator.config_entry.runtime_data
+        return {
+            ATTR_SHIPMENTS: [shipment.as_summary() for shipment in self.shipments()],
+            ATTR_CARRIERS: {plugin.carrier_id: plugin.name for plugin in runtime.registry.plugins},
+            ATTR_DESTINATIONS: {
+                destination.id: destination.name for destination in runtime.destinations
+            },
+        }
 
 
 # ----------------------------------------------------------------------
