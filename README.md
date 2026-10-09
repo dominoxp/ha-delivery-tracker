@@ -78,6 +78,11 @@ npm test
 npm run build
 ```
 
+Zum Entwickeln startet `npm run dev` eine Vorschau mit Beispieldaten im Browser
+([card/dev/](card/dev/)): alle Varianten der Karte, Leer- und Fehlerzustände, der
+visuelle Editor und ein Umschalter für helles und dunkles Theme. Sie bindet die Quellen
+direkt ein und lädt bei jeder Änderung neu; zum Build gehört sie nicht.
+
 **Tests laufen im Docker-Container.** Home Assistant importiert seit 2025.10 die
 Unix-Module `fcntl` und `resource` und lässt sich deshalb unter Windows nicht mehr
 importieren. `check.cmd` baut dafür das Image aus [Dockerfile.test](Dockerfile.test)

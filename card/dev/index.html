@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Delivery Tracker Karte</title>
+    <link rel="stylesheet" href="./preview.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div>
+          <h1>Delivery Tracker Karte</h1>
+          <p>
+            Entwicklungsvorschau mit Beispieldaten (<code>npm run dev</code>). Termine sind relativ
+            zu heute berechnet, Zeitzone Europe/Berlin. Ein Klick auf eine Sendung klappt die
+            Details auf.
+          </p>
+        </div>
+        <div class="themes" role="group" aria-label="Theme">
+          <button type="button" data-theme-choice="" aria-pressed="true">System</button>
+          <button type="button" data-theme-choice="light" aria-pressed="false">Hell</button>
+          <button type="button" data-theme-choice="dark" aria-pressed="false">Dunkel</button>
+        </div>
+      </header>
+
+      <div class="grid">
+        <section class="panel">
+          <div class="label">
+            <strong>Standard</strong><span>alle Felder, eine Sendung aufgeklappt</span>
+          </div>
+          <pre>entity: sensor.delivery_tracker_aktive_sendungen</pre>
+          <delivery-tracker-card
+            data-config='{"entity":"sensor.delivery_tracker_aktive_sendungen"}'
+            data-open="dhl_heute"
+          ></delivery-tracker-card>
+        </section>
+
+        <section class="panel">
+          <div class="label"><strong>Gruppiert nach Zielort</strong><span>mit Titel</span></div>
+          <pre>
+title: Pakete
+group_by: destination</pre>
+          <delivery-tracker-card
+            data-config='{"entity":"sensor.delivery_tracker_aktive_sendungen","title":"Pakete","group_by":"destination"}'
+          ></delivery-tracker-card>
+        </section>
+
+        <section class="panel">
+          <div class="label">
+            <strong>Mobil, 360 px</strong><span>nach Status sortiert, höchstens 4</span>
+          </div>
+          <pre>
+sort_by: status
+max_items: 4</pre>
+          <div class="phone">
+            <delivery-tracker-card
+              data-config='{"entity":"sensor.delivery_tracker_aktive_sendungen","sort_by":"status","max_items":4}'
+              data-open="amazon_locker"
+            ></delivery-tracker-card>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="label">
+            <strong>Kompakt</strong><span>nur Status, Termin und Zielort</span>
+          </div>
+          <pre>
+title: Heute und morgen
+fields: [status, eta, destination]
+statuses: [out_for_delivery, in_transit, delayed]</pre>
+          <delivery-tracker-card
+            data-config='{"entity":"sensor.delivery_tracker_aktive_sendungen","title":"Heute und morgen","fields":["status","eta","destination"],"statuses":["out_for_delivery","in_transit","delayed"]}'
+          ></delivery-tracker-card>
+        </section>
+
+        <section class="panel">
+          <div class="label">
+            <strong>Gruppiert nach Status</strong><span>Probleme sichtbar abgesetzt</span>
+          </div>
+          <pre>
+group_by: status
+fields: [carrier, status, progress, sender]</pre>
+          <delivery-tracker-card
+            data-config='{"entity":"sensor.delivery_tracker_aktive_sendungen","group_by":"status","fields":["carrier","status","progress","sender"]}'
+          ></delivery-tracker-card>
+        </section>
+
+        <section class="panel">
+          <div class="label"><strong>Leer- und Fehlerzustände</strong></div>
+          <div class="duo">
+            <delivery-tracker-card
+              data-config='{"entity":"sensor.delivery_tracker_buero"}'
+            ></delivery-tracker-card>
+            <delivery-tracker-card
+              data-config='{"entity":"sensor.delivery_tracker_aktive_sendungen","title":"Nur UPS","carriers":["ups"]}'
+            ></delivery-tracker-card>
+            <delivery-tracker-card
+              data-config='{"entity":"sensor.delivery_tracker_zuhause","title":"Zuhause"}'
+            ></delivery-tracker-card>
+            <delivery-tracker-card
+              data-config='{"entity":"sensor.paket_alt","title":"Alter Sensor"}'
+            ></delivery-tracker-card>
+          </div>
+        </section>
+
+        <section class="panel wide">
+          <div class="label">
+            <strong>Visueller Editor</strong
+            ><span>Änderungen wirken live auf die Karte daneben</span>
+          </div>
+          <div class="duo">
+            <div class="editor-shell">
+              <delivery-tracker-card-editor id="editor"></delivery-tracker-card-editor>
+            </div>
+            <div class="panel">
+              <delivery-tracker-card
+                id="editor-preview"
+                data-config='{"entity":"sensor.delivery_tracker_aktive_sendungen","title":"Vorschau","group_by":"destination"}'
+              ></delivery-tracker-card>
+              <pre class="events" id="editor-yaml"></pre>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <footer>
+        Rahmen der Karte (<code>ha-card</code>) und Theme-Variablen sind hier nachgebildet; in HA
+        kommen sie vom Frontend.
+      </footer>
+    </div>
+    <script type="module" src="./preview.ts"></script>
+  </body>
+</html>

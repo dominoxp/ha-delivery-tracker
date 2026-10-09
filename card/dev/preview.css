@@ -1,0 +1,177 @@
+/* Entwicklungsvorschau: Dashboard-Flaeche wie in HA, darauf Varianten der Karte. */
+:root {
+  --page: #eef1f4;
+  --surface: #ffffff;
+  --raised: #e4e9ee;
+  --ink: #1c2329;
+  --ink-soft: #5b6670;
+  --rule: #d3dae0;
+  --accent: #0b7fc3;
+  --ok: #2e8540;
+  --warn: #c77700;
+  --bad: #c62828;
+  --font-body: "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #111417;
+    --surface: #1c2126;
+    --raised: #2a3138;
+    --ink: #e3e8ec;
+    --ink-soft: #9aa6b0;
+    --rule: #343c44;
+    --accent: #4fb3ef;
+    --ok: #5cbf6e;
+    --warn: #f0a33a;
+    --bad: #ef6b6b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #111417;
+  --surface: #1c2126;
+  --raised: #2a3138;
+  --ink: #e3e8ec;
+  --ink-soft: #9aa6b0;
+  --rule: #343c44;
+  --accent: #4fb3ef;
+  --ok: #5cbf6e;
+  --warn: #f0a33a;
+  --bad: #ef6b6b;
+  color-scheme: dark;
+}
+
+/* Die Variablen, die das HA-Frontend jeder Karte mitgibt. */
+:root {
+  --primary-background-color: var(--page);
+  --card-background-color: var(--surface);
+  --ha-card-background: var(--surface);
+  --secondary-background-color: var(--raised);
+  --primary-text-color: var(--ink);
+  --secondary-text-color: var(--ink-soft);
+  --divider-color: var(--rule);
+  --primary-color: var(--accent);
+  --success-color: var(--ok);
+  --warning-color: var(--warn);
+  --error-color: var(--bad);
+  --code-font-family: var(--font-mono);
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.wrap {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding-inline: 16px;
+  padding-block: 24px 48px;
+}
+header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-bottom: 24px;
+}
+h1 {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 500;
+}
+header p {
+  margin: 4px 0 0;
+  max-width: 62ch;
+  color: var(--ink-soft);
+}
+.themes {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.themes button {
+  border: 0;
+  padding: 8px 14px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 500 0.9rem var(--font-body);
+  cursor: pointer;
+}
+.themes button + button {
+  border-left: 1px solid var(--rule);
+}
+.themes button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--surface);
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.panel.wide {
+  grid-column: 1 / -1;
+}
+.label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.label strong {
+  font-weight: 500;
+}
+.label span {
+  color: var(--ink-soft);
+  font-size: 0.9em;
+}
+pre {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--ink-soft);
+  font: 0.78rem/1.5 var(--font-mono);
+  overflow-x: auto;
+}
+.phone {
+  width: 360px;
+  max-width: 100%;
+  padding: 12px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 24px;
+}
+.duo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+}
+.editor-shell {
+  padding: 16px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.events {
+  min-height: 3em;
+}
+footer {
+  margin-top: 32px;
+  color: var(--ink-soft);
+  font-size: 0.85em;
+}
