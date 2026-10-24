@@ -388,7 +388,7 @@
         },
         "sender": {
           "name": "Absender",
-          "description": "Absenderadresse, gern mit Namen wie „DHL <noreply@dhl.de>“."
+          "description": "Absenderadresse, gern mit Anzeigenamen davor wie im Beispiel."
         },
         "body": {
           "name": "Mailtext",

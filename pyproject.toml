@@ -7,13 +7,13 @@ name = "ha-delivery-tracker"
 version = "0.0.0.dev0"
 description = "Home-Assistant-Integration, die Paket-Benachrichtigungen aus einem IMAP-Postfach auswertet"
 readme = "README.md"
-# HA 2026.7 setzt Python 3.14 voraus.
-requires-python = ">=3.14"
+# HA 2026.7 setzt Python 3.14.2 voraus.
+requires-python = ">=3.14.2"
 license = { text = "MIT" }
 authors = [{ name = "dominoxp" }]
 
 dependencies = [
-    "aioimaplib==2.0.1",
+    "aioimaplib>=2.0.1",
 ]
 
 [project.optional-dependencies]
