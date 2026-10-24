@@ -273,9 +273,13 @@
       },
       "mails": {
         "title": "Recent mails",
-        "description": "The most recently processed mails per mailbox, newest first. ⚠️ means: the carrier was recognised but no shipment – usually advertising, sometimes an unrecognised delivery mail.\n\n{mails}",
+        "description": "The most recently processed mails per mailbox, newest first. ⚠️ means: the carrier was recognised but no shipment – usually advertising, sometimes an unrecognised delivery mail.\n\nThe log starts with the update to this version. Older mails only appear after “Re-read mailbox”.\n\n{notice}\n\n{mails}",
         "data": {
-          "filter": "Show"
+          "filter": "Show",
+          "rescan": "Re-read mailbox"
+        },
+        "data_description": {
+          "rescan": "Reads all mails of the configured period again, including already read ones. Shipments are only merged, not duplicated. Submit the dialog again afterwards to see the result."
         }
       }
     },
@@ -436,7 +440,9 @@
         "col_source": "Source",
         "col_subject": "Subject",
         "col_from": "From",
-        "col_result": "Result"
+        "col_result": "Result",
+        "rescan_started": "Re-reading started: {mailboxes}. Depending on the mailbox this takes a few seconds to minutes.",
+        "rescan_running": "The mailbox is being re-read …"
       }
     }
   },

@@ -302,6 +302,36 @@ async def test_first_run_honours_lookback(
     assert handler.uids == [2]
 
 
+async def test_rescan_reads_seen_mails_of_lookback_in_blocks(
+    server: FakeImapServer, make_source: Callable[..., ImapSource]
+) -> None:
+    """Neu-Einlesen holt auch gelesene Mails im Zeitraum, blockweise, und laeuft dann normal."""
+    now = dt_util.utcnow()
+    server.add_message(build_message(subject="Uralt"), date=now - timedelta(days=30))
+    for index in range(3):
+        server.add_message(build_message(subject=f"Gelesen {index}"), flags=["\\Seen"])
+    handler = RecordingHandler()
+    source = make_source(server, lookback_days=7, max_messages=2, handler=handler)
+    await source.async_setup()
+    await source.async_fetch()
+    assert handler.uids == []
+    last_uid = source.progress.last_uid
+
+    await source.async_rescan()
+    assert source.rescanning
+    await source.async_fetch()
+    await source.async_fetch()
+
+    assert handler.uids == [2, 3, 4]
+    assert not source.rescanning
+    assert source.progress.last_uid >= last_uid
+
+    # Danach wieder die normale Suche: nur Neues.
+    server.add_message(build_message(subject="Neu"))
+    await source.async_fetch()
+    assert handler.uids == [2, 3, 4, 5]
+
+
 async def test_large_mailbox_is_read_in_blocks(
     server: FakeImapServer, make_source: Callable[..., ImapSource]
 ) -> None:

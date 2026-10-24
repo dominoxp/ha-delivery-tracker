@@ -188,6 +188,10 @@ class MailPipeline:
         """Die letzten verarbeiteten Mails, aelteste zuerst."""
         return list(self._log)
 
+    def clear_log(self) -> None:
+        """Protokoll leeren, etwa vor dem Neu-Einlesen eines Postfachs."""
+        self._log.clear()
+
     @property
     def addresses(self) -> AddressMatcher:
         """Die aktuelle Zuordnung zu Zielorten."""

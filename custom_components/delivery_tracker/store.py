@@ -8,7 +8,7 @@ daher synchron; Schreiben passiert gebuendelt ueber `async_delay_save`.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
@@ -25,7 +25,7 @@ from .const import (
     STORAGE_SAVE_DELAY,
     STORAGE_VERSION,
 )
-from .merge import has_status_changed, merge_shipments
+from .merge import has_status_changed, merge_shipments, merge_target, same_items
 from .models import Shipment
 
 _LOGGER = logging.getLogger(__name__)
@@ -69,6 +69,8 @@ class ShipmentStore:
         self._shipments: dict[str, Shipment] = {}
         self._source_states: dict[str, dict[str, Any]] = {}
         self._mail_logs: dict[str, list[dict[str, Any]]] = {}
+        self._aliases: dict[str, str] = {}
+        """Zusammengefuehrte IDs -> ID der Sendung, in der sie aufgegangen sind."""
         self.retention_days = retention_days
         self.stale_days = stale_days
 
@@ -78,8 +80,13 @@ class ShipmentStore:
         self._shipments = {}
         self._source_states = {}
         self._mail_logs = {}
+        self._aliases = {}
         if not data:
             return
+
+        aliases = data.get("aliases")
+        if isinstance(aliases, dict):
+            self._aliases = {str(key): str(value) for key, value in aliases.items()}
 
         logs = data.get("mail_logs")
         if isinstance(logs, dict):
@@ -131,6 +138,65 @@ class ShipmentStore:
         self.async_schedule_save()
         return merged, has_status_changed(previous, merged)
 
+    def resolve(self, shipment_id: str) -> str:
+        """Die ID, unter der eine (womoeglich zusammengefuehrte) Sendung heute steht."""
+        seen: set[str] = set()
+        while shipment_id in self._aliases and shipment_id not in seen:
+            seen.add(shipment_id)
+            shipment_id = self._aliases[shipment_id]
+        return shipment_id
+
+    @callback
+    def async_route(self, shipment: Shipment) -> Shipment:
+        """Eine eintreffende Sendung auf die ID lenken, unter der sie gefuehrt wird.
+
+        Bekannte Aliase zuerst; sonst eine neue ID, die nach den Regeln aus
+        `merge_target` in eine bestehende Sendung gehoert — dann wird sie gleich
+        dort eingetragen, statt erst als eigene Sendung aufzutauchen.
+        """
+        target_id = self.resolve(shipment.id)
+        if target_id == shipment.id and shipment.id not in self._shipments:
+            target = merge_target(shipment, self._shipments.values())
+            if target is not None:
+                _LOGGER.debug("Sendung %s geht in %s auf", shipment.id, target.id)
+                self._aliases[shipment.id] = target.id
+                self.async_schedule_save()
+                target_id = target.id
+        return shipment if target_id == shipment.id else replace(shipment, id=target_id)
+
+    @callback
+    def async_consolidate(self) -> list[tuple[str, Shipment | None, Shipment]]:
+        """Bereits getrennt gespeicherte Sendungen derselben Bestellung zusammenlegen.
+
+        Laeuft nach jedem Durchlauf, damit auch Bestaende vor Einfuehrung der
+        Regel aufgeraeumt werden. Bei gleichen Artikeln bleibt die aeltere ID.
+        Gibt je Zusammenlegung (aufgegangene ID, Ziel vorher, Ziel nachher) zurueck.
+        """
+        merged: list[tuple[str, Shipment | None, Shipment]] = []
+        changed = True
+        while changed:
+            changed = False
+            for shipment in sorted(
+                self._shipments.values(), key=lambda item: (item.first_seen, item.id), reverse=True
+            ):
+                target = merge_target(shipment, self._shipments.values())
+                if target is None:
+                    continue
+                source = shipment
+                if same_items(source, target) and source.first_seen < target.first_seen:
+                    source, target = target, source
+                result = merge_shipments(target, replace(source, id=target.id))
+                del self._shipments[source.id]
+                self._shipments[target.id] = result
+                self._aliases[source.id] = target.id
+                merged.append((source.id, target, result))
+                _LOGGER.debug("Sendung %s in %s zusammengefuehrt", source.id, target.id)
+                changed = True
+                break
+        if merged:
+            self.async_schedule_save()
+        return merged
+
     @callback
     def async_replace(self, shipment: Shipment) -> None:
         """Eine Sendung ohne Merge ueberschreiben — fuer bewusste Eingriffe des Nutzers.
@@ -162,8 +228,17 @@ class ShipmentStore:
         """Eine Sendung loeschen. True, wenn es sie gab."""
         if self._shipments.pop(shipment_id, None) is None:
             return False
+        self._prune_aliases()
         self.async_schedule_save()
         return True
+
+    def _prune_aliases(self) -> None:
+        """Aliase auf Sendungen vergessen, die es nicht mehr gibt."""
+        self._aliases = {
+            key: value
+            for key, value in self._aliases.items()
+            if self.resolve(value) in self._shipments
+        }
 
     def expiry(self, shipment: Shipment) -> Expiry:
         """Wann die Retention die Sendung entfernt.
@@ -201,6 +276,7 @@ class ShipmentStore:
                 stale += expiry.rule is ExpiryRule.STALE
         for shipment_id in removed:
             del self._shipments[shipment_id]
+        self._prune_aliases()
 
         if removed:
             _LOGGER.debug(
@@ -289,4 +365,5 @@ class ShipmentStore:
             "shipments": [shipment.to_dict() for shipment in self._shipments.values()],
             "source_states": {key: dict(state) for key, state in self._source_states.items()},
             "mail_logs": {key: list(entries) for key, entries in self._mail_logs.items()},
+            "aliases": dict(self._aliases),
         }

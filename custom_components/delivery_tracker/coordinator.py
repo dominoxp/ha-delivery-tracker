@@ -523,11 +523,26 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 for incoming in shipments:
                     changes.extend(self._async_upsert(incoming))
 
+            consolidated = self._async_consolidate()
+            changes.extend(consolidated[0])
             self.store.async_assign_destinations(self._matcher)
-            removed = self.store.async_purge(now=now)
+            removed = [*consolidated[1], *self.store.async_purge(now=now)]
             self._async_persist_progress()
             async_sync_source_issues(self.hass, self.config_entry, self.sources)
             return self._build_data(now, changes, removed)
+
+    @callback
+    def _async_consolidate(self) -> tuple[list[StatusChange], list[str]]:
+        """Doppelt gefuehrte Sendungen zusammenlegen; Statuswechsel und entfallene IDs."""
+        changes: list[StatusChange] = []
+        removed: list[str] = []
+        for absorbed, before, after in self.store.async_consolidate():
+            removed.append(absorbed)
+            if before is None or before.status is not after.status:
+                changes.append(
+                    StatusChange(after.id, before.status if before else None, after.status, after)
+                )
+        return changes, removed
 
     @callback
     def _async_upsert(self, incoming: Shipment) -> list[StatusChange]:
@@ -535,7 +550,10 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         Liefert eine Aenderung, wenn die Sendung neu ist oder ihr Status
         gewechselt hat — eine Mail, die nur Bekanntes wiederholt, liefert nichts.
+        Gehoert die Sendung zu einer schon gefuehrten (`ShipmentStore.async_route`),
+        landet sie dort.
         """
+        incoming = self.store.async_route(incoming)
         previous = self.store.get(incoming.id)
         previous_status = previous.status if previous is not None else None
         merged, changed = self.store.async_upsert(incoming)
@@ -556,6 +574,26 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """
         self._forced = set(self.sources) if keys is None else set(keys)
         await self.async_refresh()
+
+    async def async_rescan_mailboxes(self) -> list[str]:
+        """Alle Postfaecher den Lookback-Zeitraum neu lesen lassen.
+
+        Das Mail-Protokoll wird dafuer geleert, damit jede Mail genau einmal
+        darin steht. Sendungen werden wie bei jeder Mail zusammengefuehrt.
+        Gibt die Titel der Postfaecher zurueck, die neu einlesen.
+        """
+        started: list[str] = []
+        for handle in self.sources.values():
+            if not isinstance(handle.source, ImapSource) or handle.state.is_permanent:
+                continue
+            if handle.pipeline is not None:
+                handle.pipeline.clear_log()
+            await handle.source.async_rescan()
+            started.append(handle.title)
+        self._async_persist_progress()
+        if started:
+            self._create_task(self.async_refresh_sources(), f"{DOMAIN} rescan")
+        return started
 
     @callback
     def async_add_shipment(self, shipment: Shipment) -> Shipment:

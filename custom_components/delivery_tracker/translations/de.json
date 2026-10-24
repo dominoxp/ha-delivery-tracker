@@ -273,9 +273,13 @@
       },
       "mails": {
         "title": "Letzte Mails",
-        "description": "Die zuletzt verarbeiteten Mails je Postfach, neueste zuerst. ⚠️ heißt: Der Zusteller wurde erkannt, aber keine Sendung – meist Werbung, manchmal eine nicht erkannte Zustellmail.\n\n{mails}",
+        "description": "Die zuletzt verarbeiteten Mails je Postfach, neueste zuerst. ⚠️ heißt: Der Zusteller wurde erkannt, aber keine Sendung – meist Werbung, manchmal eine nicht erkannte Zustellmail.\n\nDas Protokoll beginnt mit dem Update auf diese Version. Ältere Mails erscheinen erst nach „Postfach neu einlesen“.\n\n{notice}\n\n{mails}",
         "data": {
-          "filter": "Anzeigen"
+          "filter": "Anzeigen",
+          "rescan": "Postfach neu einlesen"
+        },
+        "data_description": {
+          "rescan": "Liest alle Mails des eingestellten Zeitraums erneut, auch bereits gelesene. Sendungen werden dabei nur zusammengeführt, nicht verdoppelt. Danach den Dialog erneut absenden, um den Stand zu sehen."
         }
       }
     },
@@ -436,7 +440,9 @@
         "col_source": "Quelle",
         "col_subject": "Betreff",
         "col_from": "Von",
-        "col_result": "Ergebnis"
+        "col_result": "Ergebnis",
+        "rescan_started": "Neu-Einlesen gestartet: {mailboxes}. Je nach Postfach dauert das einige Sekunden bis Minuten.",
+        "rescan_running": "Das Postfach wird gerade neu eingelesen …"
       }
     }
   },

@@ -159,6 +159,7 @@ FIELD_CONFIRM = "confirm"
 FIELD_TARGET = "target"
 FIELD_ASSIGN = "assign"
 FIELD_FILTER = "filter"
+FIELD_RESCAN = "rescan"
 ACTION_DETAILS = "details"
 ACTION_BACK = "back"
 ACTION_DELETE = "delete"
@@ -1212,6 +1213,20 @@ class DeliveryTrackerOptionsFlow(OptionsFlow):
         mail_filter = (user_input or {}).get(FIELD_FILTER, FILTER_PROBLEMS)
         texts = await self._async_texts()
         carriers, _ = self._names(runtime)
+        notice = ""
+        if user_input is not None and user_input.get(FIELD_RESCAN):
+            started = await runtime.coordinator.async_rescan_mailboxes()
+            notice = texts.get("rescan_started", mailboxes=", ".join(started) or "-")
+            logs = [
+                (handle.title, handle.pipeline.log)
+                for handle in runtime.sources.values()
+                if handle.pipeline is not None
+            ]
+        elif any(
+            isinstance(handle.source, ImapSource) and handle.source.rescanning
+            for handle in runtime.sources.values()
+        ):
+            notice = texts.get("rescan_running")
         schema = vol.Schema(
             {
                 vol.Required(FIELD_FILTER, default=mail_filter): SelectSelector(
@@ -1221,18 +1236,20 @@ class DeliveryTrackerOptionsFlow(OptionsFlow):
                         mode=SelectSelectorMode.LIST,
                     )
                 ),
+                vol.Optional(FIELD_RESCAN, default=False): BooleanSelector(),
             }
         )
         return self.async_show_form(
             step_id="mails",
             data_schema=schema,
             description_placeholders={
+                "notice": notice,
                 "mails": mail_log(
                     texts,
                     logs,
                     only_problems=mail_filter == FILTER_PROBLEMS,
                     carriers=carriers,
-                )
+                ),
             },
         )
 

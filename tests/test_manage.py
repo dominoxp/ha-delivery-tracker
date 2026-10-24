@@ -454,6 +454,43 @@ async def test_mails_zeigen_nicht_erkannte_und_auf_wunsch_alle(
     assert mails.index("Zugestellt") < mails.index("Ihr Paket")
 
 
+async def test_mails_neu_einlesen_startet_alle_postfaecher(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """Der Haken leert das Protokoll und stoesst das Neu-Einlesen an."""
+    mailbox = ConfigSubentryData(
+        data={
+            "server": "127.0.0.1",
+            "port": 1,
+            "security": "none",
+            "username": "u",
+            "password": "p",
+            "folder": "INBOX",
+        },
+        subentry_type=SUBENTRY_MAILBOX,
+        title="Privat",
+        unique_id="u@127.0.0.1",
+    )
+    with (
+        patch.object(ImapSource, "async_start", AsyncMock()),
+        patch.object(ImapSource, "async_fetch", AsyncMock(return_value=[])),
+    ):
+        entry = await setup_with(hass, hass_storage, [], mailbox)
+        (handle,) = entry.runtime_data.sources.values()
+        handle.pipeline._log.append(
+            MailLogEntry(processed_at=NOW, outcome=MailOutcome.UNMATCHED, subject="Alt")
+        )
+        result = await start_options_step(hass, entry, "mails")
+
+        with patch.object(ImapSource, "async_rescan", AsyncMock()) as rescan:
+            result = await configure(hass, result, {"filter": "all", "rescan": True})
+
+    rescan.assert_awaited_once()
+    assert handle.pipeline.log == []
+    assert "Neu-Einlesen gestartet: Privat" in result["description_placeholders"]["notice"]
+    assert result["step_id"] == "mails"
+
+
 # ----------------------------------------------------------------------
 # Bausteine
 # ----------------------------------------------------------------------

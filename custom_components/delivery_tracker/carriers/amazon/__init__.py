@@ -72,6 +72,9 @@ _ARTICLE: Final = re.compile(r"^\*[^\S\n]+(?P<value>\S[^\n]*)$", re.MULTILINE)
 # Kennungen selbst sind es nicht („Tn0znYV69" ist nicht „tn0znyv69").
 _SHIPMENT_ID: Final = re.compile(r"[?&](?i:shipmentId)=(?P<value>[A-Za-z0-9]{4,24})")
 _PACKAGE_ID: Final = re.compile(r"[?&](?i:pkgId)=(?P<value>[A-Za-z0-9][A-Za-z0-9-]{7,40})")
+# Eine Bestellbestaetigung kann mehrere Bestellungen zusammenfassen; jeder
+# Paketblock nennt deshalb seine eigene Bestellnummer.
+_ORDER_NUMBER: Final = re.compile(r"\b(?P<value>\d{3}-\d{7}-\d{7})\b")
 _ACCESS_CODE: Final = re.compile(r"[?&](?i:accessCode)=(?P<value>[A-Za-z0-9]{4,12})")
 
 # Der Verfolgen-Link. Er taugt als `tracking_url`, weil er Bestellnummer und
@@ -176,6 +179,8 @@ class Package:
     pickup_location: str | None = None
     pickup_code: str | None = None
     tracking_url: str | None = None
+    order_number: str | None = None
+    """Bestellnummer dieses Blocks, falls er eine eigene nennt."""
 
     @property
     def description(self) -> str | None:
@@ -231,6 +236,7 @@ def packages(text: str) -> list[Package]:
                 pickup_location=_pickup_location(lines),
                 pickup_code=_first(_ACCESS_CODE, block),
                 tracking_url=_tracking_url(block),
+                order_number=_first(_ORDER_NUMBER, block),
             )
         )
     return found
@@ -265,11 +271,12 @@ class AmazonCarrier(RulesCarrier):
         if package.eta_text and not template.is_closed:
             eta_start, eta_end = parse_eta(package.eta_text, now=observed_at)  # type: ignore[arg-type]
 
+        order_number = package.order_number or template.order_number
         return Shipment(
             id=build_shipment_id(
                 self.carrier_id,
                 sender=template.sender,
-                order_number=template.order_number,
+                order_number=order_number,
                 package=package.token,
             ),
             carrier=self.carrier_id,
@@ -282,7 +289,7 @@ class AmazonCarrier(RulesCarrier):
             sender=template.sender,
             description=package.description or template.description,
             items=list(package.items) or list(template.items),
-            order_number=template.order_number,
+            order_number=order_number,
             pickup_location=package.pickup_location or template.pickup_location,
             pickup_code=package.pickup_code or template.pickup_code,
             tracking_url=package.tracking_url,
