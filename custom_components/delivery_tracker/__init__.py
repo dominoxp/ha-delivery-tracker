@@ -28,7 +28,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 
 from .addresses import AddressMatcher
-from .card import async_register_card
+from .card import async_register_card, async_unregister_card
 from .carriers import async_get_registry
 from .const import DOMAIN, PLATFORMS, SUBENTRY_DESTINATION
 from .coordinator import DeliveryTrackerCoordinator
@@ -125,8 +125,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: DeliveryTrackerConfigEn
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: DeliveryTrackerConfigEntry) -> None:
-    """Beim Loeschen des Entries seine Repairs-Eintraege mitnehmen."""
+    """Beim Loeschen des Entries seine Repairs-Eintraege und die Karten-Ressource mitnehmen."""
     async_clear_issues(hass, entry)
+    await async_unregister_card(hass)
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: DeliveryTrackerConfigEntry) -> None:

@@ -34,10 +34,11 @@ stattdessen den Ordner aus einem Git-Checkout kopiert, muss die Karte vorher sel
 
 ## Lovelace-Karte
 
-Die Integration bringt ihre Karte mit und liefert sie selbst aus — weder eine eigene
-HACS-Installation noch ein Eintrag unter den Dashboard-Ressourcen ist nötig. Nach dem
-Neustart von Home Assistant (und einem Neuladen der Seite im Browser) steht
-**Delivery Tracker** in der Kartenauswahl des Dashboards.
+Die Integration bringt ihre Karte mit, liefert sie selbst aus und trägt sie beim Start als
+Dashboard-Ressource ein — eine eigene HACS-Installation ist nicht nötig. Nach dem Neustart
+von Home Assistant (und einem Neuladen der Seite im Browser) steht **Delivery Tracker** in
+der Kartenauswahl des Dashboards. Wird die Integration gelöscht, entfernt sie auch die
+Ressource wieder.
 
 ```yaml
 type: custom:delivery-tracker-card
@@ -48,9 +49,18 @@ title: Pakete # optional, sonst der Name der Entity
 `entity` muss ein Sensor der Integration sein, also einer mit dem Attribut `shipments`.
 Bei ungültiger Konfiguration zeigt die Karte statt einer leeren Fläche eine Fehlermeldung.
 
-Die Karte wird unter `/delivery_tracker/delivery-tracker-card.js` ausgeliefert. Wer sie
-trotzdem zusätzlich als Ressource einträgt, richtet keinen Schaden an — sie registriert
-sich nur einmal.
+Die Karte wird unter `/delivery_tracker/delivery-tracker-card.js` ausgeliefert. Ein von Hand
+angelegter Ressourcen-Eintrag für diese Datei wird übernommen statt verdoppelt.
+
+Werden die Ressourcen per YAML verwaltet (`lovelace: resource_mode: yaml`), kann die
+Integration nichts eintragen. Dann die Karte selbst eintragen:
+
+```yaml
+lovelace:
+  resources:
+    - url: /delivery_tracker/delivery-tracker-card.js
+      type: module
+```
 
 ## Entwicklung
 
