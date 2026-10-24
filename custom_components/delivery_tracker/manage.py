@@ -27,6 +27,8 @@ from .models import Shipment
 from .pipeline import MailLogEntry, MailOutcome
 from .store import Expiry, ExpiryRule
 
+# HTML-Reste, die ein Parser aus der Mail mitgenommen hat („Paketshop 785</a><br />").
+_TAG: Final = re.compile(r"</?[a-zA-Z][a-zA-Z0-9]*(?:\s[^<>]*)?/?>")
 # Zeichen, die in einer Markdown-Zeile oder Tabelle etwas bedeuten.
 _MARKDOWN: Final = re.compile(r"([\\`*_\[\]<>|#])")
 # Obergrenze fuer Betreffs und Absender in Tabellen.
@@ -73,7 +75,7 @@ async def async_load_texts(hass: HomeAssistant) -> Texts:
 
 def md(value: object, limit: int | None = None) -> str:
     """Freitext so maskieren, dass er Markdown und Tabellen nicht zerlegt."""
-    text = " ".join(str(value).split())
+    text = " ".join(_TAG.sub(" ", str(value)).split())
     if limit is not None and len(text) > limit:
         text = text[: limit - 1].rstrip() + "…"
     return _MARKDOWN.sub(r"\\\1", text)

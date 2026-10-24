@@ -26,6 +26,7 @@ from custom_components.delivery_tracker.const import (
     SUBENTRY_DESTINATION,
     SUBENTRY_MAILBOX,
 )
+from custom_components.delivery_tracker.manage import md
 from custom_components.delivery_tracker.merge import MAX_SOURCE_RECORDS, merge_sources
 from custom_components.delivery_tracker.models import (
     Shipment,
@@ -539,6 +540,12 @@ def test_vorschlag_aus_adresse(text: str | None, name: str, rules: dict[str, lis
 
     assert suggestion.name == name
     assert {key: value for key, value in suggestion.rules.items() if value} == rules
+
+
+def test_markdown_maskiert_und_entfernt_html_reste() -> None:
+    """Tabellen bleiben heil, HTML-Reste aus Mails verschwinden."""
+    assert md("Paketshop 785</a><br />") == "Paketshop 785"
+    assert md("A | B *c*") == "A \\| B \\*c\\*"
 
 
 def test_merge_behaelt_jede_mail(hass: HomeAssistant) -> None:
