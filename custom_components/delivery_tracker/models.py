@@ -177,6 +177,10 @@ class SourceRecord:
     fetched_at: datetime
     reference: str | None = None
     """Referenz auf die Rohdaten, z.B. IMAP-Message-ID oder API-Antwort-ID."""
+    subject: str | None = None
+    """Betreff der Mail — damit der Nutzer in der Sendungsverwaltung sieht, woher sie kommt."""
+    sender: str | None = None
+    """Absender der Mail, so wie er im Postfach steht."""
 
     def __post_init__(self) -> None:
         """Zeitstempel normalisieren."""
@@ -191,6 +195,8 @@ class SourceRecord:
             "source_id": self.source_id,
             "fetched_at": _dt_to_iso(self.fetched_at),
             "reference": self.reference,
+            "subject": self.subject,
+            "sender": self.sender,
         }
 
     @classmethod
@@ -201,6 +207,8 @@ class SourceRecord:
             source_id=str(data["source_id"]),
             fetched_at=_require_dt(data.get("fetched_at"), field_name="SourceRecord.fetched_at"),
             reference=data.get("reference"),
+            subject=data.get("subject"),
+            sender=data.get("sender"),
         )
 
 

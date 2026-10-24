@@ -30,6 +30,9 @@ from .tracking import normalize_tracking_number
 
 _NON_ALNUM: Final = re.compile(r"[^a-z0-9]+")
 
+# Obergrenze der Herkunftsnachweise je Sendung (`merge_sources`).
+MAX_SOURCE_RECORDS: Final = 20
+
 
 def tracking_id_token(value: str) -> str:
     """Die Trackingnummer auf den Teil reduzieren, der in die Sendungs-ID geht.
@@ -201,13 +204,21 @@ def merge_items(
 
 
 def merge_sources(current: list[SourceRecord], incoming: list[SourceRecord]) -> list[SourceRecord]:
-    """Je Quelle den juengsten Nachweis behalten."""
-    by_source: dict[str, SourceRecord] = {}
+    """Je Quelle und Rohdatum (Mail) den juengsten Nachweis behalten, aelteste zuerst.
+
+    Jede Mail bleibt einzeln stehen, damit die Sendungsverwaltung zeigt, aus
+    welchen Mails eine Sendung entstanden ist. API-Abrufe ohne Referenz fallen
+    auf einen Eintrag je Quelle zusammen. Die Liste ist gedeckelt; es bleiben
+    die juengsten Nachweise.
+    """
+    by_key: dict[tuple[str, str | None], SourceRecord] = {}
     for record in [*current, *incoming]:
-        existing = by_source.get(record.source_id)
+        key = (record.source_id, record.reference)
+        existing = by_key.get(key)
         if existing is None or record.fetched_at >= existing.fetched_at:
-            by_source[record.source_id] = record
-    return sorted(by_source.values(), key=lambda record: record.source_id)
+            by_key[key] = record
+    ordered = sorted(by_key.values(), key=lambda record: (record.fetched_at, record.source_id))
+    return ordered[-MAX_SOURCE_RECORDS:]
 
 
 def merge_shipments(current: Shipment, incoming: Shipment) -> Shipment:

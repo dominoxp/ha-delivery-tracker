@@ -187,6 +187,15 @@
   "options": {
     "step": {
       "init": {
+        "title": "Delivery Tracker",
+        "description": "Was möchtest du tun?",
+        "menu_options": {
+          "settings": "Einstellungen",
+          "shipments": "Sendungen ansehen und verwalten",
+          "mails": "Letzte Mails prüfen"
+        }
+      },
+      "settings": {
         "title": "Einstellungen",
         "description": "Globale Einstellungen für alle Postfächer und Quellen.",
         "data": {
@@ -201,7 +210,92 @@
           "enabled_carriers": "Mails abgeschalteter Zusteller werden nicht ausgewertet.",
           "generic_fallback": "Erkennt Sendungen unbekannter Zusteller anhand allgemeiner Muster."
         }
+      },
+      "shipments": {
+        "title": "Sendungen",
+        "description": "{overview}\n\nSortiert nach der letzten Mail, älteste zuerst. Offene Sendungen verschwinden nach {stale_days} Tagen ohne neue Mail, zugestellte {retention_days} Tage nach der Zustellung.\n\nSendungen ankreuzen, Aktion wählen, absenden.",
+        "data": {
+          "shipments": "Sendungen",
+          "action": "Aktion",
+          "confirm": "Ja, wirklich löschen"
+        },
+        "data_description": {
+          "confirm": "Nur nötig zum Löschen."
+        }
+      },
+      "shipment": {
+        "title": "{title}",
+        "description": "{facts}\n\n### Warum ist sie noch da?\n{expiry}\n\n### Verlauf\n{events}\n\n### Aus welchen Mails\n{sources}",
+        "data": {
+          "action": "Aktion",
+          "confirm": "Ja, wirklich löschen"
+        },
+        "data_description": {
+          "confirm": "Nur nötig zum Löschen."
+        }
+      },
+      "destination": {
+        "title": "Zielort aus Adresse anlegen",
+        "description": "Erkannte Lieferadresse: **{destination_raw}**\nAbholort: **{pickup_location}**\n\nDie Felder sind aus der Adresse vorbefüllt – alles lässt sich ändern, leere Felder sind keine Regel. Im nächsten Schritt siehst du, welche Sendungen dem Zielort zugeordnet werden.",
+        "data": {
+          "name": "Name",
+          "recipient_names": "Empfängernamen",
+          "streets": "Straßen mit Hausnummer",
+          "postal_codes": "Postleitzahlen",
+          "cities": "Orte",
+          "packstations": "Packstation- oder Filialnummern",
+          "post_numbers": "DHL-Postnummern",
+          "emails": "Empfänger-Mailadressen",
+          "keywords": "Schlüsselwörter"
+        }
+      },
+      "destination_extend": {
+        "title": "Adresse zu Zielort hinzufügen",
+        "description": "Erkannte Lieferadresse: **{destination_raw}**\nAbholort: **{pickup_location}**\n\nDie Einträge werden zu den bestehenden Regeln des gewählten Zielorts hinzugefügt.",
+        "data": {
+          "target": "Zielort",
+          "recipient_names": "Empfängernamen",
+          "streets": "Straßen mit Hausnummer",
+          "postal_codes": "Postleitzahlen",
+          "cities": "Orte",
+          "packstations": "Packstation- oder Filialnummern",
+          "post_numbers": "DHL-Postnummern",
+          "emails": "Empfänger-Mailadressen",
+          "keywords": "Schlüsselwörter"
+        }
+      },
+      "destination_confirm": {
+        "title": "Sendungen zuordnen",
+        "description": "Die Regeln von **{name}** passen auf {matched} Sendungen; sie und die gerade geöffnete sind vorausgewählt. Angekreuzte Sendungen werden **{name}** fest zugeordnet, auch wenn die Regeln nicht greifen (z. B. bei einem Abholort).",
+        "data": {
+          "assign": "Zuordnen"
+        }
+      },
+      "mails": {
+        "title": "Letzte Mails",
+        "description": "Die zuletzt verarbeiteten Mails je Postfach, neueste zuerst. ⚠️ heißt: Der Zusteller wurde erkannt, aber keine Sendung – meist Werbung, manchmal eine nicht erkannte Zustellmail.\n\n{mails}",
+        "data": {
+          "filter": "Anzeigen"
+        }
       }
+    },
+    "error": {
+      "select_none": "Bitte mindestens eine Sendung ankreuzen.",
+      "select_one": "Für die Details genau eine Sendung ankreuzen.",
+      "confirm_required": "Zum Löschen bitte „Ja, wirklich löschen“ ankreuzen.",
+      "unknown": "Unerwarteter Fehler.",
+      "invalid_name": "Dieser Name ist nicht zulässig. „Unbekannt“ ist für nicht zugeordnete Sendungen reserviert.",
+      "name_exists": "Eine Zieladresse mit diesem Namen gibt es bereits.",
+      "no_rules": "Mindestens eine Regel ist nötig, sonst wird der Adresse nie eine Sendung zugeordnet."
+    },
+    "abort": {
+      "not_loaded": "Die Integration ist gerade nicht geladen. Bitte später erneut versuchen.",
+      "no_shipments": "Es sind keine Sendungen gespeichert.",
+      "no_mailboxes": "Es ist kein Postfach eingerichtet.",
+      "shipment_gone": "Die Sendung gibt es nicht mehr.",
+      "shipments_removed": "{count} Sendungen gelöscht.",
+      "shipments_delivered": "{count} Sendungen als zugestellt markiert.",
+      "destination_saved": "Zielort „{name}“ gespeichert, {count} Sendungen zugeordnet."
     }
   },
   "entity": {
@@ -276,6 +370,73 @@
         "delivered": "Zugestellt",
         "delivery_failed": "Zustellung gescheitert",
         "returned": "Zurück an Absender"
+      }
+    },
+    "manage_action": {
+      "options": {
+        "details": "Details anzeigen",
+        "back": "Zurück zur Liste",
+        "mark_delivered": "Als zugestellt markieren",
+        "delete": "Löschen",
+        "destination_new": "Neuen Zielort aus dieser Adresse anlegen",
+        "destination_extend": "Adresse zu bestehendem Zielort hinzufügen"
+      }
+    },
+    "mail_filter": {
+      "options": {
+        "problems": "Nur nicht erkannte",
+        "all": "Alle"
+      }
+    },
+    "mail_outcome": {
+      "options": {
+        "matched": "Sendung erkannt",
+        "without_shipment": "Keine Sendung",
+        "unmatched": "Kein Zusteller",
+        "failed": "Fehler"
+      }
+    },
+    "manage_text": {
+      "options": {
+        "today": "heute",
+        "yesterday": "gestern",
+        "days_ago": "vor {days} Tagen",
+        "last_mail": "letzte Mail {age}",
+        "expires_in": "verschwindet in {days} Tagen",
+        "expires_today": "verschwindet heute",
+        "expires_tomorrow": "verschwindet morgen",
+        "expires_now": "verschwindet beim nächsten Durchlauf",
+        "expires_never": "bleibt (Regel abgeschaltet)",
+        "rule_closed": "Abgeschlossen am {since}.",
+        "rule_stale": "Nicht zugestellt, letzte Mail am {since}.",
+        "rule_at": "Wird am {date} automatisch entfernt",
+        "rule_off": "Die Regel ist abgeschaltet (0 Tage), sie bleibt bis zum manuellen Löschen.",
+        "overview": "**{total} Sendungen**, davon {without} ohne Zielort und {due} beim nächsten Durchlauf fällig.",
+        "none_found": "keine erkannt",
+        "no_events": "Keine Statuswechsel bekannt.",
+        "no_sources": "Keine Herkunft bekannt.",
+        "no_mails": "Keine Mails.",
+        "field_carrier": "Zusteller",
+        "field_status": "Status",
+        "field_tracking_number": "Trackingnummer",
+        "field_order_number": "Bestellnummer",
+        "field_sender": "Händler",
+        "field_items": "Artikel",
+        "field_destination": "Zielort",
+        "field_destination_raw": "Erkannte Lieferadresse",
+        "field_pickup": "Abholort / Code",
+        "field_eta": "Erwartet",
+        "field_delivered_at": "Zugestellt am",
+        "field_first_seen": "Zuerst gesehen",
+        "field_last_updated": "Letzte Mail",
+        "field_id": "ID",
+        "col_time": "Zeit",
+        "col_status": "Status",
+        "col_text": "Text",
+        "col_source": "Quelle",
+        "col_subject": "Betreff",
+        "col_from": "Von",
+        "col_result": "Ergebnis"
       }
     }
   },

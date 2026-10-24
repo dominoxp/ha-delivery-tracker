@@ -187,6 +187,15 @@
   "options": {
     "step": {
       "init": {
+        "title": "Delivery Tracker",
+        "description": "What would you like to do?",
+        "menu_options": {
+          "settings": "Settings",
+          "shipments": "View and manage shipments",
+          "mails": "Check recent mails"
+        }
+      },
+      "settings": {
         "title": "Settings",
         "description": "Global settings for all mailboxes and sources.",
         "data": {
@@ -201,7 +210,92 @@
           "enabled_carriers": "Emails from disabled carriers are not evaluated.",
           "generic_fallback": "Detects shipments from unknown carriers using general patterns."
         }
+      },
+      "shipments": {
+        "title": "Shipments",
+        "description": "{overview}\n\nSorted by last mail, oldest first. Open shipments disappear after {stale_days} days without a new mail, delivered ones {retention_days} days after delivery.\n\nTick shipments, choose an action, submit.",
+        "data": {
+          "shipments": "Shipments",
+          "action": "Action",
+          "confirm": "Yes, really delete"
+        },
+        "data_description": {
+          "confirm": "Only needed for deleting."
+        }
+      },
+      "shipment": {
+        "title": "{title}",
+        "description": "{facts}\n\n### Why is it still here?\n{expiry}\n\n### History\n{events}\n\n### From which mails\n{sources}",
+        "data": {
+          "action": "Action",
+          "confirm": "Yes, really delete"
+        },
+        "data_description": {
+          "confirm": "Only needed for deleting."
+        }
+      },
+      "destination": {
+        "title": "Create destination from address",
+        "description": "Detected delivery address: **{destination_raw}**\nPickup location: **{pickup_location}**\n\nThe fields are pre-filled from the address – everything can be changed, empty fields are no rule. The next step shows which shipments will be assigned to the destination.",
+        "data": {
+          "name": "Name",
+          "recipient_names": "Recipient names",
+          "streets": "Streets with house number",
+          "postal_codes": "Postal codes",
+          "cities": "Cities",
+          "packstations": "Parcel locker or branch numbers",
+          "post_numbers": "DHL Postnummer",
+          "emails": "Recipient email addresses",
+          "keywords": "Keywords"
+        }
+      },
+      "destination_extend": {
+        "title": "Add address to destination",
+        "description": "Detected delivery address: **{destination_raw}**\nPickup location: **{pickup_location}**\n\nThe entries are added to the existing rules of the chosen destination.",
+        "data": {
+          "target": "Destination",
+          "recipient_names": "Recipient names",
+          "streets": "Streets with house number",
+          "postal_codes": "Postal codes",
+          "cities": "Cities",
+          "packstations": "Parcel locker or branch numbers",
+          "post_numbers": "DHL Postnummer",
+          "emails": "Recipient email addresses",
+          "keywords": "Keywords"
+        }
+      },
+      "destination_confirm": {
+        "title": "Assign shipments",
+        "description": "The rules of **{name}** match {matched} shipments; they and the one you opened are preselected. Ticked shipments are assigned to **{name}** permanently, even where the rules do not match (e.g. a pickup location).",
+        "data": {
+          "assign": "Assign"
+        }
+      },
+      "mails": {
+        "title": "Recent mails",
+        "description": "The most recently processed mails per mailbox, newest first. ⚠️ means: the carrier was recognised but no shipment – usually advertising, sometimes an unrecognised delivery mail.\n\n{mails}",
+        "data": {
+          "filter": "Show"
+        }
       }
+    },
+    "error": {
+      "select_none": "Please tick at least one shipment.",
+      "select_one": "Tick exactly one shipment to see its details.",
+      "confirm_required": "To delete, tick “Yes, really delete”.",
+      "unknown": "Unexpected error.",
+      "invalid_name": "This name is not allowed. \"Unknown\" is reserved for unassigned shipments.",
+      "name_exists": "A destination with this name already exists.",
+      "no_rules": "At least one rule is required, otherwise no shipment is ever assigned to this destination."
+    },
+    "abort": {
+      "not_loaded": "The integration is not loaded right now. Please try again later.",
+      "no_shipments": "There are no stored shipments.",
+      "no_mailboxes": "No mailbox is set up.",
+      "shipment_gone": "The shipment no longer exists.",
+      "shipments_removed": "{count} shipments deleted.",
+      "shipments_delivered": "{count} shipments marked as delivered.",
+      "destination_saved": "Destination “{name}” saved, {count} shipments assigned."
     }
   },
   "entity": {
@@ -276,6 +370,73 @@
         "delivered": "Delivered",
         "delivery_failed": "Delivery failed",
         "returned": "Returned to sender"
+      }
+    },
+    "manage_action": {
+      "options": {
+        "details": "Show details",
+        "back": "Back to the list",
+        "mark_delivered": "Mark as delivered",
+        "delete": "Delete",
+        "destination_new": "Create a new destination from this address",
+        "destination_extend": "Add address to an existing destination"
+      }
+    },
+    "mail_filter": {
+      "options": {
+        "problems": "Only unrecognised",
+        "all": "All"
+      }
+    },
+    "mail_outcome": {
+      "options": {
+        "matched": "Shipment recognised",
+        "without_shipment": "No shipment",
+        "unmatched": "No carrier",
+        "failed": "Error"
+      }
+    },
+    "manage_text": {
+      "options": {
+        "today": "today",
+        "yesterday": "yesterday",
+        "days_ago": "{days} days ago",
+        "last_mail": "last mail {age}",
+        "expires_in": "disappears in {days} days",
+        "expires_today": "disappears today",
+        "expires_tomorrow": "disappears tomorrow",
+        "expires_now": "disappears on the next run",
+        "expires_never": "stays (rule disabled)",
+        "rule_closed": "Closed on {since}.",
+        "rule_stale": "Not delivered, last mail on {since}.",
+        "rule_at": "Will be removed automatically on {date}",
+        "rule_off": "The rule is disabled (0 days); it stays until deleted manually.",
+        "overview": "**{total} shipments**, {without} without destination and {due} due on the next run.",
+        "none_found": "none detected",
+        "no_events": "No status changes known.",
+        "no_sources": "No origin known.",
+        "no_mails": "No mails.",
+        "field_carrier": "Carrier",
+        "field_status": "Status",
+        "field_tracking_number": "Tracking number",
+        "field_order_number": "Order number",
+        "field_sender": "Merchant",
+        "field_items": "Items",
+        "field_destination": "Destination",
+        "field_destination_raw": "Detected delivery address",
+        "field_pickup": "Pickup location / code",
+        "field_eta": "Expected",
+        "field_delivered_at": "Delivered on",
+        "field_first_seen": "First seen",
+        "field_last_updated": "Last mail",
+        "field_id": "ID",
+        "col_time": "Time",
+        "col_status": "Status",
+        "col_text": "Text",
+        "col_source": "Source",
+        "col_subject": "Subject",
+        "col_from": "From",
+        "col_result": "Result"
       }
     }
   },

@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Final
 
@@ -436,3 +436,108 @@ def enrich_from_mail(shipments: Sequence[Shipment], mail: MailMessage) -> None:
         for address in mail.to_addresses:
             if address not in shipment.recipient_emails:
                 shipment.recipient_emails.append(address)
+
+
+# ----------------------------------------------------------------------
+# Vorschlag: aus einer erkannten Adresse einen Zielort machen
+# ----------------------------------------------------------------------
+
+_SUGGEST_TAG: Final = re.compile(r"<[^>]*>")
+# Teile einer Adresszeile: Komma, Semikolon, Zeilenumbruch oder ein freistehender Strich.
+_SUGGEST_SEPARATOR: Final = re.compile(r"\s*[,;\n]\s*|\s+[-\u2013\u2014|]\s+")
+_SUGGEST_POSTAL_CITY: Final = re.compile(
+    r"(?<!\d)(?:D-)?(?P<code>\d{5})(?!\d)(?:\s+(?P<city>[^\W\d_][\w.\-]*(?:\s[^\W\d_][\w.\-]*)?))?"
+)
+_SUGGEST_STREET: Final = re.compile(
+    r"(?P<street>(?:[^\W\d_][\w.\-]*\s)*?[^\W\d_][\w\-]*[\s\-]?"
+    r"(?:str\.|stra(?:ß|ss)e|weg|platz|allee|gasse|ring|damm|ufer|chaussee)"
+    r"\s?\d+(?:\s?[a-zA-Z](?![\w]))?)",
+    re.IGNORECASE,
+)
+_SUGGEST_PACKSTATION: Final = re.compile(
+    r"(?P<label>packstation|postfiliale|filiale|paket ?shop|parcel ?shop|locker)"
+    r"(?:\s*(?:nr\.?|nummer|no\.?))?\s*(?P<number>\d{3,})",
+    re.IGNORECASE,
+)
+_SUGGEST_LOCATION_LABEL: Final = re.compile(
+    r"packstation|filiale|paket ?shop|parcel ?shop|locker|abholstation", re.IGNORECASE
+)
+_SUGGEST_POST_NUMBER: Final = re.compile(
+    r"postnummer:?\s*(?P<number>\d[\d ]{4,14}\d)", re.IGNORECASE
+)
+# Kurze Reste wie Bundesland-Kuerzel („HE") taugen nicht als Schluesselwort.
+_SUGGEST_MIN_KEYWORD: Final = 4
+
+
+@dataclass(frozen=True, slots=True)
+class DestinationSuggestion:
+    """Vorbelegung fuer einen neuen Zielort; der Nutzer kann alles noch aendern."""
+
+    name: str
+    rules: dict[str, list[str]]
+
+
+def suggest_destination(text: str | None) -> DestinationSuggestion:
+    """Name und Regeln aus einer Adresszeile ableiten.
+
+    Bewusst grob, denn alles bleibt im Formular aenderbar. Gesucht werden
+    Postnummer, Packstation-/Filialnummer, Strasse mit Hausnummer und PLZ mit
+    Ort — im ganzen Text, weil Zusteller die Teile mal mit Komma, mal mit
+    Strich trennen. Was uebrig bleibt, wird in Teile zerlegt: Der erste ist
+    meist Empfaenger oder Ladenname und wird nur Name, die uebrigen werden
+    Schluesselwoerter (etwa der Name eines Amazon Lockers). Den eigenen Namen
+    als Regel vorzuschlagen, taugte nicht: Er steht in jeder Sendung.
+    """
+    rules: dict[str, list[str]] = {
+        "streets": [],
+        "postal_codes": [],
+        "cities": [],
+        "packstations": [],
+        "post_numbers": [],
+        "keywords": [],
+    }
+    rest = _SUGGEST_TAG.sub(" ", text or "")
+    label: str | None = None
+
+    def take(pattern: re.Pattern[str], handle: Callable[[re.Match[str]], None]) -> None:
+        nonlocal rest
+        for match in list(pattern.finditer(rest)):
+            handle(match)
+        rest = pattern.sub(" ", rest)
+
+    def add(key: str, value: str | None) -> None:
+        value = (value or "").strip(" .,")
+        if value and value.casefold() not in (item.casefold() for item in rules[key]):
+            rules[key].append(value)
+
+    def on_station(match: re.Match[str]) -> None:
+        nonlocal label
+        add("packstations", match.group("number"))
+        label = label or f"{match.group('label').title()} {match.group('number')}"
+
+    take(_SUGGEST_POST_NUMBER, lambda match: add("post_numbers", _digits(match.group("number"))))
+    take(_SUGGEST_PACKSTATION, on_station)
+    take(_SUGGEST_STREET, lambda match: add("streets", match.group("street")))
+
+    def on_place(match: re.Match[str]) -> None:
+        add("postal_codes", match.group("code"))
+        add("cities", match.group("city"))
+
+    take(_SUGGEST_POSTAL_CITY, on_place)
+
+    parts = [
+        part.strip(" .")
+        for part in _SUGGEST_SEPARATOR.split(_SPACES.sub(" ", rest))
+        if part.strip(" .")
+    ]
+    first, others = (parts[0], parts[1:]) if parts else (None, [])
+    for part in others:
+        if len(part) >= _SUGGEST_MIN_KEYWORD:
+            add("keywords", part)
+
+    name = label
+    if name is None and first and _SUGGEST_LOCATION_LABEL.search(first) and rules["keywords"]:
+        # „Amazon Locker - Lindenhof": erst der Zusatz macht den Namen eindeutig.
+        name = f"{first} {rules['keywords'][0]}"
+    name = name or first or next(iter(rules["streets"]), None)
+    return DestinationSuggestion(name=name or "", rules=rules)

@@ -118,6 +118,13 @@ class MailMessage:
         return domain.strip().strip(">").lower()
 
     @property
+    def sender(self) -> str | None:
+        """„Name <adresse>" bzw. was davon bekannt ist, wie ein Mailprogramm es zeigt."""
+        if self.from_name and self.from_address:
+            return f"{self.from_name} <{self.from_address}>"
+        return self.from_address or self.from_name or None
+
+    @property
     def is_bulk(self) -> bool:
         """True bei Massenversand — Newsletter tragen fast immer `List-Unsubscribe`."""
         return bool(self.list_unsubscribe)

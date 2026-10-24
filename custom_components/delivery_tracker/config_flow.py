@@ -21,15 +21,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable, Mapping
-from typing import Any
+from collections.abc import Awaitable, Callable, Iterable, Mapping
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, cast
 
 import voluptuous as vol
 from homeassistant.config_entries import (
     SOURCE_RECONFIGURE,
     ConfigEntry,
+    ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
+    ConfigSubentry,
     ConfigSubentryFlow,
     OptionsFlow,
     SubentryFlowResult,
@@ -50,8 +53,10 @@ from homeassistant.helpers.selector import (
     TextSelectorConfig,
     TextSelectorType,
 )
+from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
 
+from .addresses import AddressMatcher, suggest_destination
 from .carriers import async_get_registry
 from .const import (
     API_SOURCE_TYPES,
@@ -95,6 +100,17 @@ from .const import (
     SUBENTRY_DESTINATION,
     SUBENTRY_MAILBOX,
 )
+from .manage import (
+    EMPTY,
+    Texts,
+    async_load_texts,
+    mail_log,
+    md,
+    overview,
+    shipment_details,
+    shipment_label,
+)
+from .models import Destination, Shipment
 from .sources.imap_source import (
     ImapAuthError,
     ImapConfig,
@@ -109,6 +125,9 @@ from .sources.seventeentrack_api import (
     SeventeenTrackClient,
     SeventeenTrackError,
 )
+
+if TYPE_CHECKING:
+    from .entry import DeliveryTrackerData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -131,6 +150,33 @@ ERROR_INVALID_API_KEY = "invalid_api_key"
 ABORT_ALREADY_CONFIGURED = "already_configured"
 ABORT_REAUTH_SUCCESSFUL = "reauth_successful"
 ABORT_REAUTH_UNKNOWN_SOURCE = "reauth_unknown_source"
+
+# Sendungsverwaltung im Options-Flow.
+OPTIONS_MENU = ("settings", "shipments", "mails")
+FIELD_SHIPMENTS = "shipments"
+FIELD_ACTION = "action"
+FIELD_CONFIRM = "confirm"
+FIELD_TARGET = "target"
+FIELD_ASSIGN = "assign"
+FIELD_FILTER = "filter"
+ACTION_DETAILS = "details"
+ACTION_BACK = "back"
+ACTION_DELETE = "delete"
+ACTION_MARK_DELIVERED = "mark_delivered"
+ACTION_DESTINATION_NEW = "destination_new"
+ACTION_DESTINATION_EXTEND = "destination_extend"
+FILTER_PROBLEMS = "problems"
+FILTER_ALL = "all"
+ERROR_SELECT_NONE = "select_none"
+ERROR_SELECT_ONE = "select_one"
+ERROR_CONFIRM_REQUIRED = "confirm_required"
+ABORT_NOT_LOADED = "not_loaded"
+ABORT_NO_SHIPMENTS = "no_shipments"
+ABORT_NO_MAILBOXES = "no_mailboxes"
+ABORT_SHIPMENT_GONE = "shipment_gone"
+ABORT_SHIPMENTS_REMOVED = "shipments_removed"
+ABORT_SHIPMENTS_DELIVERED = "shipments_delivered"
+ABORT_DESTINATION_SAVED = "destination_saved"
 
 # Grenzen der Zahlenfelder.
 MIN_POLL_INTERVAL = 30
@@ -516,6 +562,28 @@ def _clean_rules(values: Any) -> list[str]:
     return list(dict.fromkeys(value.strip() for value in values if value and value.strip()))
 
 
+def destination_name_error(name: str, destination_id: str, others: Iterable[Any]) -> str | None:
+    """Fehlerschluessel, wenn Name oder ID eines Zielorts nicht taugen.
+
+    `others` sind die uebrigen Zielort-Subentries. Gilt fuer den Subentry-Flow
+    und fuer „Zielort aus Sendung anlegen" in der Sendungsverwaltung.
+    """
+    if (
+        not name
+        or not destination_id
+        or destination_id == DESTINATION_UNKNOWN
+        or name.casefold() == DESTINATION_UNKNOWN_NAME.casefold()
+    ):
+        return ERROR_INVALID_NAME
+    if any(
+        subentry.title.casefold() == name.casefold()
+        or subentry.data.get(CONF_DESTINATION_ID) == destination_id
+        for subentry in others
+    ):
+        return ERROR_NAME_EXISTS
+    return None
+
+
 class DestinationSubentryFlow(ConfigSubentryFlow):
     """Einen Zielort mit seinen Match-Regeln anlegen oder bearbeiten.
 
@@ -547,19 +615,8 @@ class DestinationSubentryFlow(ConfigSubentryFlow):
             destination_id = current.get(CONF_DESTINATION_ID) or slugify(name)
             others = _other_subentries(self, SUBENTRY_DESTINATION)
 
-            if (
-                not name
-                or not destination_id
-                or destination_id == DESTINATION_UNKNOWN
-                or name.casefold() == DESTINATION_UNKNOWN_NAME.casefold()
-            ):
-                errors[CONF_NAME] = ERROR_INVALID_NAME
-            elif any(
-                subentry.title.casefold() == name.casefold()
-                or subentry.data.get(CONF_DESTINATION_ID) == destination_id
-                for subentry in others
-            ):
-                errors[CONF_NAME] = ERROR_NAME_EXISTS
+            if name_error := destination_name_error(name, destination_id, others):
+                errors[CONF_NAME] = name_error
             elif not any(rules.values()):
                 errors["base"] = ERROR_NO_RULES
             else:
@@ -727,14 +784,33 @@ class ApiSourceSubentryFlow(ConfigSubentryFlow):
 
 
 class DeliveryTrackerOptionsFlow(OptionsFlow):
-    """Retention und aktive Zusteller.
+    """Einstellungen und Sendungsverwaltung.
+
+    Das Menue fuehrt zu den globalen Einstellungen (Retention, aktive
+    Zusteller), zur Liste der Sendungen und zum Protokoll der letzten Mails.
 
     Bewusst kein `OptionsFlowWithReload`: Den Reload uebernimmt der
-    Update-Listener, der auch bei Subentry-Aenderungen greift.
+    Update-Listener, der auch bei Subentry-Aenderungen greift. Die Schritte der
+    Sendungsverwaltung enden mit `async_abort` statt `async_create_entry` —
+    sonst wuerden die Optionen ueberschrieben und der Entry neu geladen.
     """
 
+    def __init__(self) -> None:
+        """Zustand zwischen den Schritten."""
+        self._shipment_id: str | None = None
+        self._target: str | None = None
+        """`None` = neuer Zielort, sonst die Subentry-ID des zu ergaenzenden."""
+        self._pending: Destination | None = None
+        self._texts: Texts | None = None
+
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Das einzige Formular."""
+        """Das Menue."""
+        return self.async_show_menu(step_id="init", menu_options=list(OPTIONS_MENU))
+
+    async def async_step_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Globale Einstellungen."""
         registry = await async_get_registry(self.hass)
         carriers = [plugin for plugin in registry.plugins if plugin.carrier_id != CARRIER_GENERIC]
         carrier_ids = {plugin.carrier_id for plugin in carriers}
@@ -784,4 +860,387 @@ class DeliveryTrackerOptionsFlow(OptionsFlow):
                 ): BooleanSelector(),
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(step_id="settings", data_schema=schema)
+
+    # ------------------------------------------------------------------
+    # Sendungsverwaltung
+    # ------------------------------------------------------------------
+
+    def _runtime(self) -> DeliveryTrackerData | None:
+        """Laufzeitdaten des Entries; `None`, solange er nicht geladen ist."""
+        entry = self.config_entry
+        if entry.state is not ConfigEntryState.LOADED:
+            return None
+        return cast("DeliveryTrackerData", entry.runtime_data)
+
+    async def _async_texts(self) -> Texts:
+        if self._texts is None:
+            self._texts = await async_load_texts(self.hass)
+        return self._texts
+
+    @staticmethod
+    def _names(runtime: DeliveryTrackerData) -> tuple[dict[str, str], dict[str, str]]:
+        """Anzeigenamen der Zusteller und Zielorte."""
+        carriers = {plugin.carrier_id: plugin.name for plugin in runtime.registry.plugins}
+        destinations = {destination.id: destination.name for destination in runtime.destinations}
+        return carriers, destinations
+
+    async def _async_shipment_options(
+        self, runtime: DeliveryTrackerData, shipments: list[Shipment]
+    ) -> list[SelectOptionDict]:
+        """Eine Auswahlzeile je Sendung."""
+        texts = await self._async_texts()
+        carriers, destinations = self._names(runtime)
+        now = dt_util.utcnow()
+        return [
+            SelectOptionDict(
+                value=shipment.id,
+                label=shipment_label(
+                    texts,
+                    shipment,
+                    runtime.store.expiry(shipment),
+                    carriers=carriers,
+                    destinations=destinations,
+                    now=now,
+                ),
+            )
+            for shipment in shipments
+        ]
+
+    @staticmethod
+    def _sorted_shipments(runtime: DeliveryTrackerData) -> list[Shipment]:
+        """Laengste Zeit ohne neue Mail zuerst — die Kandidaten zum Aufraeumen."""
+        return sorted(runtime.store.shipments, key=lambda item: (item.last_updated, item.id))
+
+    async def async_step_shipments(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Alle Sendungen; markierte loeschen, abhaken oder im Detail ansehen."""
+        if (runtime := self._runtime()) is None:
+            return self.async_abort(reason=ABORT_NOT_LOADED)
+        shipments = self._sorted_shipments(runtime)
+        if not shipments:
+            return self.async_abort(reason=ABORT_NO_SHIPMENTS)
+
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            known = {shipment.id for shipment in shipments}
+            selected = [value for value in user_input.get(FIELD_SHIPMENTS) or [] if value in known]
+            action = user_input.get(FIELD_ACTION, ACTION_DETAILS)
+            if not selected:
+                errors["base"] = ERROR_SELECT_NONE
+            elif action == ACTION_DETAILS:
+                if len(selected) != 1:
+                    errors["base"] = ERROR_SELECT_ONE
+                else:
+                    self._shipment_id = selected[0]
+                    return await self.async_step_shipment()
+            elif result := self._apply_action(runtime, action, selected, user_input, errors):
+                return result
+
+        texts = await self._async_texts()
+        schema = vol.Schema(
+            {
+                vol.Optional(FIELD_SHIPMENTS, default=[]): SelectSelector(
+                    SelectSelectorConfig(
+                        options=await self._async_shipment_options(runtime, shipments),
+                        multiple=True,
+                        mode=SelectSelectorMode.LIST,
+                    )
+                ),
+                vol.Required(FIELD_ACTION, default=ACTION_DETAILS): _action_selector(
+                    [ACTION_DETAILS, ACTION_MARK_DELIVERED, ACTION_DELETE]
+                ),
+                vol.Optional(FIELD_CONFIRM, default=False): BooleanSelector(),
+            }
+        )
+        expiries = {shipment.id: runtime.store.expiry(shipment) for shipment in shipments}
+        return self.async_show_form(
+            step_id="shipments",
+            data_schema=self.add_suggested_values_to_schema(schema, user_input or {}),
+            errors=errors,
+            description_placeholders={
+                "overview": overview(texts, shipments, expiries, now=dt_util.utcnow()),
+                "stale_days": str(runtime.store.stale_days),
+                "retention_days": str(runtime.store.retention_days),
+            },
+        )
+
+    def _apply_action(
+        self,
+        runtime: DeliveryTrackerData,
+        action: str,
+        selected: list[str],
+        user_input: Mapping[str, Any],
+        errors: dict[str, str],
+    ) -> ConfigFlowResult | None:
+        """Loeschen oder als zugestellt markieren; `None` heisst: Formular erneut zeigen."""
+        coordinator = runtime.coordinator
+        if action == ACTION_DELETE:
+            if not user_input.get(FIELD_CONFIRM):
+                errors["base"] = ERROR_CONFIRM_REQUIRED
+                return None
+            removed = coordinator.async_remove_shipments(selected)
+            return self.async_abort(
+                reason=ABORT_SHIPMENTS_REMOVED,
+                description_placeholders={"count": str(len(removed))},
+            )
+        if action == ACTION_MARK_DELIVERED:
+            marked = [
+                shipment_id
+                for shipment_id in selected
+                if coordinator.async_mark_delivered(shipment_id) is not None
+            ]
+            return self.async_abort(
+                reason=ABORT_SHIPMENTS_DELIVERED,
+                description_placeholders={"count": str(len(marked))},
+            )
+        errors["base"] = ERROR_UNKNOWN
+        return None
+
+    async def async_step_shipment(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Eine Sendung mit allem, was ueber sie bekannt ist."""
+        if (runtime := self._runtime()) is None:
+            return self.async_abort(reason=ABORT_NOT_LOADED)
+        if self._shipment_id is None or (shipment := runtime.store.get(self._shipment_id)) is None:
+            return self.async_abort(reason=ABORT_SHIPMENT_GONE)
+
+        destinations = self.config_entry.get_subentries_of_type(SUBENTRY_DESTINATION)
+        actions = [ACTION_BACK, ACTION_MARK_DELIVERED, ACTION_DELETE, ACTION_DESTINATION_NEW]
+        if destinations:
+            actions.append(ACTION_DESTINATION_EXTEND)
+
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            action = user_input.get(FIELD_ACTION, ACTION_BACK)
+            if action == ACTION_BACK:
+                return await self.async_step_shipments()
+            if action in (ACTION_DESTINATION_NEW, ACTION_DESTINATION_EXTEND):
+                self._target = None if action == ACTION_DESTINATION_NEW else ""
+                return await self.async_step_destination()
+            if result := self._apply_action(runtime, action, [shipment.id], user_input, errors):
+                return result
+
+        texts = await self._async_texts()
+        carriers, names = self._names(runtime)
+        schema = vol.Schema(
+            {
+                vol.Required(FIELD_ACTION, default=ACTION_BACK): _action_selector(actions),
+                vol.Optional(FIELD_CONFIRM, default=False): BooleanSelector(),
+            }
+        )
+        return self.async_show_form(
+            step_id="shipment",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders=shipment_details(
+                texts,
+                shipment,
+                runtime.store.expiry(shipment),
+                carriers=carriers,
+                destinations=names,
+                now=dt_util.utcnow(),
+            ),
+        )
+
+    async def async_step_destination(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Zielort aus der Adresse der Sendung anlegen oder einen bestehenden ergaenzen."""
+        if (runtime := self._runtime()) is None:
+            return self.async_abort(reason=ABORT_NOT_LOADED)
+        if self._shipment_id is None or (shipment := runtime.store.get(self._shipment_id)) is None:
+            return self.async_abort(reason=ABORT_SHIPMENT_GONE)
+
+        extend = self._target is not None
+        subentries = self.config_entry.get_subentries_of_type(SUBENTRY_DESTINATION)
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            rules = {key: _clean_rules(user_input.get(key)) for key in CONF_DESTINATION_RULES}
+            if extend:
+                chosen = user_input.get(FIELD_TARGET)
+                target = next((item for item in subentries if item.subentry_id == chosen), None)
+                if target is None:
+                    errors[FIELD_TARGET] = ERROR_UNKNOWN
+                elif not any(rules.values()):
+                    errors["base"] = ERROR_NO_RULES
+                else:
+                    self._target = target.subentry_id
+                    current = Destination.from_dict(target.data)
+                    self._pending = Destination.from_dict(
+                        {
+                            **target.data,
+                            **{
+                                key: list(dict.fromkeys([*getattr(current, key), *rules[key]]))
+                                for key in CONF_DESTINATION_RULES
+                            },
+                        }
+                    )
+                    return await self.async_step_destination_confirm()
+            else:
+                name = str(user_input.get(CONF_NAME, "")).strip()
+                destination_id = slugify(name)
+                if name_error := destination_name_error(name, destination_id, subentries):
+                    errors[CONF_NAME] = name_error
+                elif not any(rules.values()):
+                    errors["base"] = ERROR_NO_RULES
+                else:
+                    self._pending = Destination(id=destination_id, name=name, **rules)
+                    return await self.async_step_destination_confirm()
+
+        address = shipment.destination_raw or shipment.pickup_location
+        suggestion = suggest_destination(address)
+        fields: dict[Any, Any] = {}
+        if extend:
+            fields[vol.Required(FIELD_TARGET)] = SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(value=item.subentry_id, label=item.title)
+                        for item in subentries
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            )
+        else:
+            fields[vol.Required(CONF_NAME)] = str
+        fields.update({vol.Optional(key): _RULE_SELECTOR for key in CONF_DESTINATION_RULES})
+        suggested: dict[str, Any] = {CONF_NAME: suggestion.name, **suggestion.rules}
+        return self.async_show_form(
+            step_id="destination_extend" if extend else "destination",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(fields), user_input or suggested
+            ),
+            errors=errors,
+            description_placeholders={
+                "destination_raw": md(shipment.destination_raw or EMPTY),
+                "pickup_location": md(shipment.pickup_location or EMPTY),
+            },
+        )
+
+    async def async_step_destination_extend(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Formular-Schritt „Zielort ergaenzen" — gleiche Logik wie `destination`."""
+        return await self.async_step_destination(user_input)
+
+    async def async_step_destination_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Vorschau: Welche Sendungen der Zielort bekommt; dann speichern."""
+        if (runtime := self._runtime()) is None:
+            return self.async_abort(reason=ABORT_NOT_LOADED)
+        destination = self._pending
+        if destination is None or self._shipment_id is None:
+            return self.async_abort(reason=ABORT_SHIPMENT_GONE)
+        shipments = self._sorted_shipments(runtime)
+        known = {shipment.id for shipment in shipments}
+
+        if user_input is not None:
+            selected = [value for value in user_input.get(FIELD_ASSIGN) or [] if value in known]
+            runtime.store.async_set_destination_override(selected, destination.id)
+            data = {
+                CONF_DESTINATION_ID: destination.id,
+                CONF_NAME: destination.name,
+                **{key: list(getattr(destination, key)) for key in CONF_DESTINATION_RULES},
+            }
+            target = self.config_entry.subentries.get(self._target) if self._target else None
+            # Beides loest ueber den Update-Listener einen Reload aus; der
+            # Store wird beim Entladen geschrieben, die Zuordnung bleibt also.
+            if target is not None:
+                self.hass.config_entries.async_update_subentry(self.config_entry, target, data=data)
+            else:
+                self.hass.config_entries.async_add_subentry(
+                    self.config_entry,
+                    ConfigSubentry(
+                        data=MappingProxyType(data),
+                        subentry_type=SUBENTRY_DESTINATION,
+                        title=destination.name,
+                        unique_id=destination.id,
+                    ),
+                )
+            return self.async_abort(
+                reason=ABORT_DESTINATION_SAVED,
+                description_placeholders={
+                    "name": destination.name,
+                    "count": str(len(selected)),
+                },
+            )
+
+        matcher = AddressMatcher([destination])
+        matched = [
+            shipment.id
+            for shipment in shipments
+            if matcher.match(shipment.destination_raw, shipment.recipient_emails).destination_id
+            == destination.id
+        ]
+        default = list(dict.fromkeys([self._shipment_id, *matched]))
+        schema = vol.Schema(
+            {
+                vol.Optional(FIELD_ASSIGN, default=default): SelectSelector(
+                    SelectSelectorConfig(
+                        options=await self._async_shipment_options(runtime, shipments),
+                        multiple=True,
+                        mode=SelectSelectorMode.LIST,
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(
+            step_id="destination_confirm",
+            data_schema=schema,
+            description_placeholders={
+                "name": md(destination.name),
+                "matched": str(len(matched)),
+            },
+        )
+
+    async def async_step_mails(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Die letzten verarbeiteten Mails je Postfach mit ihrem Ergebnis."""
+        if (runtime := self._runtime()) is None:
+            return self.async_abort(reason=ABORT_NOT_LOADED)
+        logs = [
+            (handle.title, handle.pipeline.log)
+            for handle in runtime.sources.values()
+            if handle.pipeline is not None
+        ]
+        if not logs:
+            return self.async_abort(reason=ABORT_NO_MAILBOXES)
+
+        mail_filter = (user_input or {}).get(FIELD_FILTER, FILTER_PROBLEMS)
+        texts = await self._async_texts()
+        carriers, _ = self._names(runtime)
+        schema = vol.Schema(
+            {
+                vol.Required(FIELD_FILTER, default=mail_filter): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[FILTER_PROBLEMS, FILTER_ALL],
+                        translation_key="mail_filter",
+                        mode=SelectSelectorMode.LIST,
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(
+            step_id="mails",
+            data_schema=schema,
+            description_placeholders={
+                "mails": mail_log(
+                    texts,
+                    logs,
+                    only_problems=mail_filter == FILTER_PROBLEMS,
+                    carriers=carriers,
+                )
+            },
+        )
+
+
+def _action_selector(actions: list[str]) -> SelectSelector:
+    """Auswahl der Aktion; die Texte stehen unter `selector.manage_action`."""
+    return SelectSelector(
+        SelectSelectorConfig(
+            options=actions, translation_key="manage_action", mode=SelectSelectorMode.LIST
+        )
+    )

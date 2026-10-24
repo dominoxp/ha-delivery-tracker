@@ -108,6 +108,15 @@ async def configure_subentry(hass: HomeAssistant, result: Any, user_input: dict[
     return result
 
 
+async def start_options_step(hass: HomeAssistant, entry: ConfigEntry, step: str) -> Any:
+    """Den Options-Flow oeffnen und im Menue einen Punkt waehlen."""
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.MENU
+    return await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": step}
+    )
+
+
 def subentries_of(entry: ConfigEntry, subentry_type: str) -> list[Any]:
     """Alle Subentries eines Typs."""
     return entry.get_subentries_of_type(subentry_type)
@@ -601,7 +610,7 @@ async def test_api_source_bearbeiten(hass: HomeAssistant, setup_integration: Con
 async def test_options_flow(hass: HomeAssistant, setup_integration: ConfigEntry) -> None:
     """Abgeschaltete Zusteller werden als Negativliste gespeichert."""
     entry = setup_integration
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await start_options_step(hass, entry, "settings")
     assert result["type"] is FlowResultType.FORM
     offered = {
         option["value"]
@@ -638,7 +647,7 @@ async def test_jede_aenderung_loest_genau_einen_reload_aus(
     entry = setup_integration
 
     with count_reloads(hass) as reloads:
-        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await start_options_step(hass, entry, "settings")
         await hass.config_entries.options.async_configure(
             result["flow_id"],
             {
