@@ -69,7 +69,7 @@ from .dates import local_day_range
 from .issues import async_sync_source_issues
 from .merge import merge_events, merge_sources
 from .models import Destination, Shipment, ShipmentEvent, ShipmentStatus, SourceRecord
-from .pipeline import MailPipeline
+from .pipeline import MailLogEntry, MailPipeline
 from .sources import (
     API_SOURCE_FACTORIES,
     ImapConfig,
@@ -394,7 +394,10 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return handle
 
         pipeline = MailPipeline(
-            self._registry, source_id=SOURCE_IMAP, destinations=self._destinations
+            self._registry,
+            source_id=SOURCE_IMAP,
+            destinations=self._destinations,
+            log=self._stored_mail_log(subentry.subentry_id),
         )
         handle.pipeline = pipeline
         handle.source = ImapSource(
@@ -406,6 +409,16 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
             source_id=SOURCE_IMAP,
         )
         return handle
+
+    def _stored_mail_log(self, key: str) -> list[MailLogEntry]:
+        """Das gespeicherte Mail-Protokoll eines Postfachs; Unlesbares faellt weg."""
+        entries: list[MailLogEntry] = []
+        for item in self.store.mail_log(key):
+            try:
+                entries.append(MailLogEntry.from_dict(item))
+            except KeyError, TypeError, ValueError, IndexError:
+                continue
+        return entries
 
     def _create_api_source(self, subentry: ConfigSubentry) -> SourceHandle:
         """Eine API-Quelle ueber die Fabrik ihres Typs."""
@@ -510,11 +523,26 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 for incoming in shipments:
                     changes.extend(self._async_upsert(incoming))
 
+            consolidated = self._async_consolidate()
+            changes.extend(consolidated[0])
             self.store.async_assign_destinations(self._matcher)
-            removed = self.store.async_purge(now=now)
+            removed = [*consolidated[1], *self.store.async_purge(now=now)]
             self._async_persist_progress()
             async_sync_source_issues(self.hass, self.config_entry, self.sources)
             return self._build_data(now, changes, removed)
+
+    @callback
+    def _async_consolidate(self) -> tuple[list[StatusChange], list[str]]:
+        """Doppelt gefuehrte Sendungen zusammenlegen; Statuswechsel und entfallene IDs."""
+        changes: list[StatusChange] = []
+        removed: list[str] = []
+        for absorbed, before, after in self.store.async_consolidate():
+            removed.append(absorbed)
+            if before is None or before.status is not after.status:
+                changes.append(
+                    StatusChange(after.id, before.status if before else None, after.status, after)
+                )
+        return changes, removed
 
     @callback
     def _async_upsert(self, incoming: Shipment) -> list[StatusChange]:
@@ -522,7 +550,10 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         Liefert eine Aenderung, wenn die Sendung neu ist oder ihr Status
         gewechselt hat — eine Mail, die nur Bekanntes wiederholt, liefert nichts.
+        Gehoert die Sendung zu einer schon gefuehrten (`ShipmentStore.async_route`),
+        landet sie dort.
         """
+        incoming = self.store.async_route(incoming)
         previous = self.store.get(incoming.id)
         previous_status = previous.status if previous is not None else None
         merged, changed = self.store.async_upsert(incoming)
@@ -543,6 +574,26 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """
         self._forced = set(self.sources) if keys is None else set(keys)
         await self.async_refresh()
+
+    async def async_rescan_mailboxes(self) -> list[str]:
+        """Alle Postfaecher den Lookback-Zeitraum neu lesen lassen.
+
+        Das Mail-Protokoll wird dafuer geleert, damit jede Mail genau einmal
+        darin steht. Sendungen werden wie bei jeder Mail zusammengefuehrt.
+        Gibt die Titel der Postfaecher zurueck, die neu einlesen.
+        """
+        started: list[str] = []
+        for handle in self.sources.values():
+            if not isinstance(handle.source, ImapSource) or handle.state.is_permanent:
+                continue
+            if handle.pipeline is not None:
+                handle.pipeline.clear_log()
+            await handle.source.async_rescan()
+            started.append(handle.title)
+        self._async_persist_progress()
+        if started:
+            self._create_task(self.async_refresh_sources(), f"{DOMAIN} rescan")
+        return started
 
     @callback
     def async_add_shipment(self, shipment: Shipment) -> Shipment:
@@ -591,10 +642,15 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
     @callback
     def async_remove_shipment(self, shipment_id: str) -> bool:
         """Eine Sendung loeschen. True, wenn es sie gab."""
-        if not self.store.async_remove(shipment_id):
-            return False
-        self._async_publish(removed=[shipment_id])
-        return True
+        return bool(self.async_remove_shipments([shipment_id]))
+
+    @callback
+    def async_remove_shipments(self, shipment_ids: Iterable[str]) -> list[str]:
+        """Mehrere Sendungen loeschen und einmal ausliefern. Gibt die geloeschten IDs zurueck."""
+        removed = [item for item in shipment_ids if self.store.async_remove(item)]
+        if removed:
+            self._async_publish(removed=removed)
+        return removed
 
     @callback
     def _async_publish(
@@ -665,10 +721,14 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     @callback
     def _async_persist_progress(self) -> None:
-        """IMAP-Fortschritt im Store ablegen, damit er einen Neustart ueberlebt."""
+        """IMAP-Fortschritt und Mail-Protokoll sichern, damit sie einen Neustart ueberleben."""
         for key, handle in self.sources.items():
             if isinstance(handle.source, ImapSource):
                 self.store.async_set_source_state(key, handle.source.progress.to_dict())
+            if handle.pipeline is not None:
+                self.store.async_set_mail_log(
+                    key, [entry.to_dict() for entry in handle.pipeline.log]
+                )
 
     def _build_data(
         self,

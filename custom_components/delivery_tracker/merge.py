@@ -11,6 +11,7 @@ Grundregeln (siehe `planning.md`):
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from typing import Any, Final
 
 from .const import (
@@ -29,6 +30,9 @@ from .models import (
 from .tracking import normalize_tracking_number
 
 _NON_ALNUM: Final = re.compile(r"[^a-z0-9]+")
+
+# Obergrenze der Herkunftsnachweise je Sendung (`merge_sources`).
+MAX_SOURCE_RECORDS: Final = 20
 
 
 def tracking_id_token(value: str) -> str:
@@ -201,13 +205,21 @@ def merge_items(
 
 
 def merge_sources(current: list[SourceRecord], incoming: list[SourceRecord]) -> list[SourceRecord]:
-    """Je Quelle den juengsten Nachweis behalten."""
-    by_source: dict[str, SourceRecord] = {}
+    """Je Quelle und Rohdatum (Mail) den juengsten Nachweis behalten, aelteste zuerst.
+
+    Jede Mail bleibt einzeln stehen, damit die Sendungsverwaltung zeigt, aus
+    welchen Mails eine Sendung entstanden ist. API-Abrufe ohne Referenz fallen
+    auf einen Eintrag je Quelle zusammen. Die Liste ist gedeckelt; es bleiben
+    die juengsten Nachweise.
+    """
+    by_key: dict[tuple[str, str | None], SourceRecord] = {}
     for record in [*current, *incoming]:
-        existing = by_source.get(record.source_id)
+        key = (record.source_id, record.reference)
+        existing = by_key.get(key)
         if existing is None or record.fetched_at >= existing.fetched_at:
-            by_source[record.source_id] = record
-    return sorted(by_source.values(), key=lambda record: record.source_id)
+            by_key[key] = record
+    ordered = sorted(by_key.values(), key=lambda record: (record.fetched_at, record.source_id))
+    return ordered[-MAX_SOURCE_RECORDS:]
 
 
 def merge_shipments(current: Shipment, incoming: Shipment) -> Shipment:
@@ -262,3 +274,71 @@ def has_status_changed(previous: Shipment | None, current: Shipment) -> bool:
     if previous is None:
         return current.status is not ShipmentStatus.UNKNOWN
     return previous.status is not current.status
+
+
+# ----------------------------------------------------------------------
+# Getrennt gefuehrte Sendungen derselben Bestellung zusammenfuehren
+# ----------------------------------------------------------------------
+
+
+def package_anchor(shipment: Shipment) -> str | None:
+    """Die Paketkennung in der ID (`shipmentId`/`pkgId`), sonst `None`.
+
+    Eine reine Bestellnummer oder ein Blockindex der Bestellbestaetigung
+    („…_0") ist keine Kennung: Beides sagt nicht, um welches Paket es geht.
+    """
+    if not shipment.order_number:
+        return None
+    marker = f"_{_slug(shipment.order_number)}"
+    position = shipment.id.find(marker)
+    if position < 0:
+        return None
+    token = shipment.id[position + len(marker) :].strip("_")
+    return token if token and not token.isdigit() else None
+
+
+def _item_set(shipment: Shipment) -> frozenset[str]:
+    """Die Artikel als Menge — Amazon zaehlt sie je Mail in anderer Reihenfolge auf."""
+    return frozenset(" ".join(item.casefold().split()) for item in shipment.items if item.strip())
+
+
+def merge_target(shipment: Shipment, candidates: Iterable[Shipment]) -> Shipment | None:
+    """Die Sendung, in die `shipment` gehoert — oder `None`, wenn das nicht eindeutig ist.
+
+    Kriterium (Step 3.2): gleiche Bestellnummer **und** die Artikel von
+    `shipment` sind Teil der Artikel des Ziels. Die Bestellnummer allein reicht
+    nie, weil alle Pakete einer Bestellung sie teilen. Zwei Sendungen mit
+    verschiedenen Paketkennungen sind immer verschiedene Pakete, auch bei
+    gleichem Artikel. Ohne Artikel gibt es kein Kriterium — dann bleibt es
+    bei der getrennten Sendung.
+
+    Passen mehrere Ziele, die untereinander dieselbe Sendung sind (gleiche
+    Artikel, keine widerspruechlichen Kennungen), gewinnt die aelteste. Sonst
+    ist die Zuordnung mehrdeutig und unterbleibt.
+    """
+    items = _item_set(shipment)
+    if not shipment.order_number or not items:
+        return None
+    anchor = package_anchor(shipment)
+    found = [
+        candidate
+        for candidate in candidates
+        if candidate.id != shipment.id
+        and candidate.carrier == shipment.carrier
+        and candidate.order_number == shipment.order_number
+        and items <= _item_set(candidate)
+        and not (anchor and (other := package_anchor(candidate)) and other != anchor)
+    ]
+    if not found:
+        return None
+    if len(found) > 1:
+        first = _item_set(found[0])
+        anchors = {package_anchor(candidate) for candidate in found} - {None}
+        if len(anchors) > 1 or any(_item_set(candidate) != first for candidate in found):
+            return None
+    return min(found, key=lambda candidate: (candidate.first_seen, candidate.id))
+
+
+def same_items(first: Shipment, second: Shipment) -> bool:
+    """True, wenn beide Sendungen dieselben Artikel tragen."""
+    return _item_set(first) == _item_set(second)

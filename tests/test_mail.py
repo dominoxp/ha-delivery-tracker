@@ -108,6 +108,32 @@ def test_html_mail_liefert_lesbaren_text_mit_links(email_fixture: Loader):
     assert "Beste Grüße" in mail.text
 
 
+def test_text_teil_mit_html_wird_bereinigt():
+    """Manche Zusteller (DHL) schicken HTML im Text-Teil — Tags und Entities fallen weg."""
+    raw = (
+        b"Subject: Test\n"
+        b"Content-Type: text/plain; charset=UTF-8\n\n"
+        b"Abholbereit ab dem n&auml;chsten&nbsp;Werktag.<br />\n"
+        b'<a href="https://example.org/shop">Paketshop 785</a><br />\n'
+    )
+
+    mail = parse_mail(raw)
+
+    assert "<" not in mail.text
+    assert "ab dem nächsten Werktag." in mail.text
+    assert "Paketshop 785 (https://example.org/shop)" in mail.text
+
+
+def test_reiner_text_bleibt_unveraendert():
+    """Ohne Tags wird nichts umgewandelt — auch kein „&" in Firmennamen."""
+    raw = (
+        b"Subject: Test\nContent-Type: text/plain; charset=UTF-8\n\n"
+        b"Absender: Mueller & Soehne\nSendungsnummer: 123\n"
+    )
+
+    assert parse_mail(raw).text == "Absender: Mueller & Soehne\nSendungsnummer: 123"
+
+
 def test_html_mail_verwirft_zaehlpixel_und_skripte(email_fixture: Loader):
     """Zaehlpixel, Stylesheets und Skripte sind kein Mailinhalt."""
     mail = parse_mail(email_fixture("html_only.eml"))

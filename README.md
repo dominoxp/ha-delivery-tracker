@@ -32,6 +32,25 @@ Home Assistant neu starten. Das Release enthält die fertig gebaute Lovelace-Kar
 stattdessen den Ordner aus einem Git-Checkout kopiert, muss die Karte vorher selbst bauen
 (siehe [Entwicklung](#entwicklung)).
 
+## Sendungen verwalten
+
+Unter **Einstellungen → Geräte & Dienste → Delivery Tracker → Konfigurieren** gibt es neben
+den Einstellungen zwei weitere Punkte:
+
+- **Sendungen ansehen und verwalten:** alle gespeicherten Sendungen, die mit der ältesten
+  Mail zuerst. Jede Zeile nennt Zusteller, Status, Artikel, Zielort, wann die letzte Mail kam
+  und wann die Sendung von selbst verschwindet. Markierte Sendungen lassen sich löschen oder
+  als zugestellt markieren. Die Details einer Sendung zeigen alles Bekannte, warum sie noch da
+  ist, ihren Statusverlauf und die Mails (Betreff, Absender), aus denen sie stammt.
+  Aus der erkannten Adresse oder dem Abholort lässt sich direkt ein Zielort anlegen oder ein
+  bestehender ergänzen — vorbefüllt, änderbar, mit Vorschau, welche Sendungen er bekommt.
+  Ausgewählte Sendungen werden ihm fest zugeordnet.
+- **Letzte Mails prüfen:** die letzten 100 verarbeiteten Mails je Postfach mit Ergebnis
+  (Sendung erkannt, Zusteller erkannt aber keine Sendung, kein Zusteller, Fehler). Damit
+  fallen Mails auf, die nicht erkannt wurden, etwa eine Zustellmail in neuem Format.
+
+Betreffs und Absender bleiben lokal im Store; die Diagnose-Datei enthält sie nicht.
+
 ## Lovelace-Karte
 
 Die Integration bringt ihre Karte mit, liefert sie selbst aus und trägt sie beim Start als

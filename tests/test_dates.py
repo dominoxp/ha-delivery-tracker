@@ -45,6 +45,8 @@ def berlin_timezone() -> Generator[None]:
         ("übermorgen", date(2026, 7, 30)),
         ("Wir liefern am Freitag", date(2026, 7, 31)),
         ("Wir liefern am Dienstag", date(2026, 7, 28)),
+        ("ab dem nächsten Werktag, 11 Uhr", date(2026, 7, 29)),
+        ("naechster Werktag", date(2026, 7, 29)),
     ],
 )
 def test_parse_german_date(text: str, expected: date):
@@ -55,6 +57,18 @@ def test_parse_german_date(text: str, expected: date):
 def test_konkretes_datum_schlaegt_wochentag():
     """In „Montag, 03.08." gewinnt das ausgeschriebene Datum."""
     assert parse_german_date("Montag, 03.08.", today=TODAY) == date(2026, 8, 3)
+
+
+@pytest.mark.parametrize(
+    ("today", "expected"),
+    [
+        (date(2026, 7, 31), date(2026, 8, 1)),
+        (date(2026, 8, 1), date(2026, 8, 3)),
+    ],
+)
+def test_naechster_werktag_ueberspringt_den_sonntag(today: date, expected: date):
+    """Freitag → Samstag, Samstag → Montag."""
+    assert parse_german_date("ab dem nächsten Werktag", today=today) == expected
 
 
 def test_datum_ohne_jahr_springt_ins_naechste_jahr():

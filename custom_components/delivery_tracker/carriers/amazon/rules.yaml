@@ -79,6 +79,9 @@ status_map:
       - "neuer (?:voraussichtlicher )?(?:liefertermin|zustelltag)"
   - status: out_for_delivery
     patterns:
+      # Nur mit Doppelpunkt: Das steht im Betreff („In Zustellung: „Artikel…""),
+      # die nackte Zeile „In Zustellung" dagegen im Fortschrittsbalken jeder Mail.
+      - "^in zustellung:"
       - "kommt heute"
       - "wird heute[^\\n]{0,40}(?:zugestellt|geliefert)"
       - "ist heute[^\\n]{0,30}unterwegs"

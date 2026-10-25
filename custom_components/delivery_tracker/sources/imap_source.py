@@ -99,6 +99,9 @@ _IMAP_MONTHS: Final = (
     "Dec",
 )
 
+# Suchkriterien zum Lesestatus; das Neu-Einlesen laesst sie weg.
+_READ_STATE_CRITERIA: Final = frozenset({"UNSEEN", "SEEN", "NEW", "OLD", "RECENT"})
+
 # Fehler, die ein Verbindungsproblem beschreiben und einen Reconnect ausloesen
 # (`ssl.SSLError` ist ein `OSError` und damit bereits enthalten).
 _CONNECTION_ERRORS: Final = (AioImapException, TimeoutError, OSError)
@@ -296,6 +299,8 @@ class ImapSource(TrackingSource):
         self._last_error: str | None = None
         self._last_success: datetime | None = None
         self._processed = 0
+        self._rescan_after: int | None = None
+        """Waehrend eines Neu-Einlesens: hoechste schon erneut gelesene UID."""
 
     # ------------------------------------------------------------------
     # Zustand nach aussen
@@ -357,6 +362,29 @@ class ImapSource(TrackingSource):
         buffered = self._buffer
         self._buffer = []
         return buffered
+
+    async def async_rescan(self) -> None:
+        """Alle Mails im Lookback-Zeitraum erneut verarbeiten, auch schon gelesene.
+
+        Fuer die Fehlersuche in der Sendungsverwaltung: Das Mail-Protokoll
+        beginnt sonst erst mit der naechsten neuen Mail. Gelesene Mails findet
+        die normale Suche (`UNSEEN`) nicht mehr, deshalb laeuft das Neu-Einlesen
+        mit eigenen Kriterien, blockweise wie gewohnt, und kehrt danach zur
+        normalen Suche zurueck. Der Fortschritt bleibt dabei unangetastet.
+
+        Ein laufender Hintergrund-Loop wird dafuer neu gestartet.
+        """
+        restart = self._runner is not None and not self._runner.done()
+        if restart:
+            await self.async_close()
+        self._rescan_after = 0
+        if restart:
+            await self.async_start()
+
+    @property
+    def rescanning(self) -> bool:
+        """True, solange ein Neu-Einlesen laeuft."""
+        return self._rescan_after is not None
 
     async def async_close(self) -> None:
         """Loop beenden und Verbindung abbauen. Mehrfach aufrufbar."""
@@ -483,6 +511,13 @@ class ImapSource(TrackingSource):
                 # Auch uebersprungene UIDs zaehlen als erledigt, sonst haengt der
                 # Fortschritt fuer immer an einer einzigen kaputten Mail fest.
                 self.progress.last_uid = max(self.progress.last_uid, uid)
+                if self._rescan_after is not None:
+                    self._rescan_after = uid
+            if self._rescan_after is not None and not self._more_pending:
+                _LOGGER.debug("%s: Neu-Einlesen abgeschlossen", self)
+                self._rescan_after = None
+                # Was waehrenddessen neu ankam, holt die normale Suche nach.
+                self._more_pending = True
         finally:
             if found and self._on_new_data is not None:
                 self._on_new_data()
@@ -512,17 +547,36 @@ class ImapSource(TrackingSource):
         # `charset=None` laesst das `CHARSET`-Argument weg; die Kriterien sind rein ASCII
         # und manche Server lehnen CHARSET bei SEARCH ab.
         response = await client.uid_search(*criteria, charset=None)
+        if response.result != "OK" and self._rescan_after is not None:
+            # Die umgebauten Kriterien sind dem Server womoeglich nicht recht.
+            # Kein Verbindungsproblem: Neu-Einlesen aufgeben, normal weiterlaufen.
+            _LOGGER.warning(
+                "%s: Neu-Einlesen abgebrochen, SEARCH %s abgelehnt", self, " ".join(criteria)
+            )
+            self._rescan_after = None
+            return []
         if response.result != "OK":
             raise ImapConnectionError(f"SEARCH {' '.join(criteria)} fehlgeschlagen")
         if not response.lines:
             return []
         uids = sorted({int(token) for token in response.lines[0].split() if token.isdigit()})
+        if self._rescan_after is not None:
+            return [uid for uid in uids if uid > self._rescan_after]
         # `n:*` liefert bei leerem Bereich immer die hoechste UID mit — die muss weg.
         return [uid for uid in uids if uid > self.progress.last_uid]
 
     def _search_criteria(self) -> tuple[str, ...]:
         """Suchkriterien fuer diesen Durchlauf."""
         criteria: list[str] = []
+        if self._rescan_after is not None:
+            # Neu-Einlesen: der ganze Lookback-Zeitraum, gelesen oder nicht.
+            if self._rescan_after:
+                criteria += ["UID", f"{self._rescan_after + 1}:*"]
+            if self.config.lookback_days > 0:
+                since = dt_util.utcnow() - timedelta(days=self.config.lookback_days)
+                criteria += ["SINCE", _imap_date(since)]
+            criteria += _without_read_state(self.config.search.split())
+            return tuple(criteria) or ("ALL",)
         if self.progress.last_uid:
             criteria += ["UID", f"{self.progress.last_uid + 1}:*"]
         elif self.config.lookback_days > 0:
@@ -823,3 +877,24 @@ def _quote_mailbox(name: str) -> str:
 def _imap_date(value: datetime) -> str:
     """Ein Datum im IMAP-Format `01-Jan-2026`."""
     return f"{value.day:02d}-{_IMAP_MONTHS[value.month - 1]}-{value.year}"
+
+
+def _without_read_state(tokens: Iterable[str]) -> list[str]:
+    """Suchkriterien ohne Bedingung auf den Lesestatus — fuer das Neu-Einlesen.
+
+    Jede solche Bedingung wird zu `ALL`, ein vorangestelltes `NOT` gleich mit:
+    Einfach weglassen hinterliesse bei `NOT SEEN` ein `NOT` ohne Argument und
+    bei `OR UNSEEN FLAGGED` ein `OR` mit nur einem — beides lehnt der Server ab.
+    Ein alleinstehendes `ALL` neben anderen Kriterien schadet nicht, IMAP
+    verknuepft alles mit UND.
+    """
+    result: list[str] = []
+    for token in tokens:
+        if token.upper() not in _READ_STATE_CRITERIA:
+            result.append(token)
+        elif result and result[-1].upper() == "NOT":
+            result[-1] = "ALL"
+        else:
+            result.append("ALL")
+    # Bleibt nur `ALL` uebrig, ist es dasselbe wie gar kein Kriterium.
+    return [] if all(token.upper() == "ALL" for token in result) else result

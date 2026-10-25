@@ -20,6 +20,7 @@ from custom_components.delivery_tracker.sources import (
     ImapState,
     RawMail,
 )
+from custom_components.delivery_tracker.sources.imap_source import _without_read_state
 from tests.fake_imap import FakeImapServer, build_message, server_ssl_context
 
 # Kurze Zeiten: Die Tests sollen an Zustaenden haengen, nicht an Uhren.
@@ -204,8 +205,12 @@ async def test_connection_drop_reconnects_without_loss_or_duplicates(
         await notified.wait()
 
     notified.clear()
+    idle_starts = server.idle_starts
     assert server.drop_connections() == 1
-    await wait_for(lambda: server.connections == 1)
+    # Erst zustellen, wenn der Client wieder im IDLE haengt: Eine offene Verbindung
+    # allein heisst nicht, dass er schon nachgelesen hat — eine Mail zwischen seiner
+    # Suche und dem IDLE meldet der Fake-Server nie, der Test liefe in den Timeout.
+    await wait_for(lambda: server.connections == 1 and server.idle_starts > idle_starts)
 
     server.add_message(build_message(subject="Nach dem Abriss"))
     async with asyncio.timeout(TIMEOUT):
@@ -300,6 +305,71 @@ async def test_first_run_honours_lookback(
     await source.async_fetch()
 
     assert handler.uids == [2]
+
+
+async def test_rescan_reads_seen_mails_of_lookback_in_blocks(
+    server: FakeImapServer, make_source: Callable[..., ImapSource]
+) -> None:
+    """Neu-Einlesen holt auch gelesene Mails im Zeitraum, blockweise, und laeuft dann normal."""
+    now = dt_util.utcnow()
+    server.add_message(build_message(subject="Uralt"), date=now - timedelta(days=30))
+    for index in range(3):
+        server.add_message(build_message(subject=f"Gelesen {index}"), flags=["\\Seen"])
+    handler = RecordingHandler()
+    source = make_source(server, lookback_days=7, max_messages=2, handler=handler)
+    await source.async_setup()
+    await source.async_fetch()
+    assert handler.uids == []
+    last_uid = source.progress.last_uid
+
+    await source.async_rescan()
+    assert source.rescanning
+    await source.async_fetch()
+    await source.async_fetch()
+
+    assert handler.uids == [2, 3, 4]
+    assert not source.rescanning
+    assert source.progress.last_uid >= last_uid
+
+    # Danach wieder die normale Suche: nur Neues.
+    server.add_message(build_message(subject="Neu"))
+    await source.async_fetch()
+    assert handler.uids == [2, 3, 4, 5]
+
+
+@pytest.mark.parametrize(
+    ("search", "expected"),
+    [
+        ("UNSEEN", []),
+        ("NOT SEEN", []),
+        ("UNSEEN FROM dhl.de", ["ALL", "FROM", "dhl.de"]),
+        ("NOT SEEN FROM dhl.de", ["ALL", "FROM", "dhl.de"]),
+        ("OR UNSEEN FLAGGED", ["OR", "ALL", "FLAGGED"]),
+        ("OR NOT SEEN FLAGGED", ["OR", "ALL", "FLAGGED"]),
+        ("FROM shop.de", ["FROM", "shop.de"]),
+    ],
+)
+def test_rescan_criteria_drop_read_state_without_breaking_syntax(
+    search: str, expected: list[str]
+) -> None:
+    """Kein `NOT` und kein `OR` ohne Argument bleibt zurueck."""
+    assert _without_read_state(search.split()) == expected
+
+
+async def test_rescan_ends_when_server_rejects_search(
+    server: FakeImapServer, make_source: Callable[..., ImapSource]
+) -> None:
+    """Lehnt der Server die Suche ab, endet das Neu-Einlesen; die normale Suche laeuft weiter."""
+    handler = RecordingHandler()
+    # Das Fake kennt `FROM` nicht und antwortet mit BAD — wie ein Server bei kaputter Syntax.
+    source = make_source(server, search="UNSEEN FROM shop.de", handler=handler)
+    await source.async_setup()
+
+    await source.async_rescan()
+    await source.async_fetch()
+
+    assert not source.rescanning
+    assert source.state is not ImapState.ERROR
 
 
 async def test_large_mailbox_is_read_in_blocks(

@@ -118,6 +118,13 @@ class MailMessage:
         return domain.strip().strip(">").lower()
 
     @property
+    def sender(self) -> str | None:
+        """„Name <adresse>" bzw. was davon bekannt ist, wie ein Mailprogramm es zeigt."""
+        if self.from_name and self.from_address:
+            return f"{self.from_name} <{self.from_address}>"
+        return self.from_address or self.from_name or None
+
+    @property
     def is_bulk(self) -> bool:
         """True bei Massenversand — Newsletter tragen fast immer `List-Unsubscribe`."""
         return bool(self.list_unsubscribe)
@@ -233,6 +240,14 @@ _LINK_SCHEMES: Final[tuple[str, ...]] = ("http://", "https://")
 MAX_LINK_LENGTH: Final = 400
 
 _TAGS: Final = re.compile(r"<[^>]*>")
+# HTML-Reste in schon aufbereitetem Text („Paketshop 785</a><br />"). Enger als
+# `_TAGS`, damit ein freistehendes „<" im Text stehen bleibt.
+_TAG_REMNANT: Final = re.compile(r"</?[a-zA-Z][a-zA-Z0-9]*(?:\s[^<>]*)?/?>")
+
+
+def strip_tags(text: str) -> str:
+    """HTML-Reste durch Leerzeichen ersetzen — fuer Anzeige und Adressvorschlag."""
+    return _TAG_REMNANT.sub(" ", text)
 
 
 class _TextExtractor(HTMLParser):
@@ -425,6 +440,10 @@ def parse_mail(raw: bytes, *, uid: int | None = None, folder: str | None = None)
     if html is not None and len(text) < MIN_USEFUL_TEXT:
         # Reine HTML-Mail oder ein Text-Teil, der nur auf HTML verweist.
         text = html_to_text(html)[:MAX_BODY_LENGTH]
+    elif _HTML_HINT.search(text):
+        # Text-Teil mit HTML darin (DHL): Tags und Entities wie `&nbsp;` wuerden
+        # sonst in Feldern landen und Saetze fuer die Regeln zerreissen.
+        text = html_to_text(text)[:MAX_BODY_LENGTH]
 
     from_name, from_address = parseaddr(decode_header_value(message.get("From")))
 

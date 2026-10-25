@@ -83,6 +83,7 @@ _TEXTUAL_DATE: Final = re.compile(
 )
 _RELATIVE_DATE: Final = re.compile(rf"\b({_alternation(_RELATIVE_DAYS)})\b")
 _WEEKDAY_DATE: Final = re.compile(rf"\b({_alternation(_WEEKDAYS)})\b")
+_NEXT_WORKDAY: Final = re.compile(r"\bnaechste[nmr]?\s+werktag")
 
 # „zwischen 10 und 14 Uhr", „10:00 - 14:00 Uhr", „von 8 bis 12 Uhr"
 _TIME_RANGE_UHR: Final = re.compile(
@@ -167,6 +168,16 @@ def _parse_relative(text: str, today: date) -> date | None:
     return today + timedelta(days=_RELATIVE_DAYS[match.group(1)])
 
 
+def _parse_next_workday(text: str, today: date) -> date | None:
+    """„naechster Werktag" — Montag bis Samstag, Feiertage bleiben aussen vor."""
+    if _NEXT_WORKDAY.search(text) is None:
+        return None
+    day = today + timedelta(days=1)
+    if day.weekday() == _WEEKDAYS["sonntag"]:
+        day += timedelta(days=1)
+    return day
+
+
 def _parse_weekday(text: str, today: date) -> date | None:
     """„Montag" — gemeint ist der naechste, wobei der heutige Tag zaehlt."""
     match = _WEEKDAY_DATE.search(text)
@@ -180,14 +191,20 @@ def parse_german_date(text: str, *, today: date | None = None) -> date | None:
     """Das erste erkennbare Datum aus einem Text lesen.
 
     Reihenfolge der Versuche: numerisch, ausgeschriebener Monat, Relativangabe,
-    Wochentag. Damit gewinnt in „Montag, 28.07." das konkrete Datum.
+    naechster Werktag, Wochentag. Damit gewinnt in „Montag, 28.07." das konkrete Datum.
     """
     if not text:
         return None
 
     reference = today if today is not None else dt_util.now().date()
     folded = _fold(text)
-    for parser in (_parse_numeric, _parse_textual, _parse_relative, _parse_weekday):
+    for parser in (
+        _parse_numeric,
+        _parse_textual,
+        _parse_relative,
+        _parse_next_workday,
+        _parse_weekday,
+    ):
         parsed = parser(folded, reference)
         if parsed is not None:
             return parsed

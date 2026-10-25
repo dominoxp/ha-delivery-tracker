@@ -242,6 +242,8 @@ def build_shipments_from_rules(
                         source_id=source_id,
                         fetched_at=fetched_at,
                         reference=mail.message_id or None,
+                        subject=mail.subject or None,
+                        sender=mail.sender,
                     )
                 ],
                 first_seen=observed_at,
