@@ -204,8 +204,12 @@ async def test_connection_drop_reconnects_without_loss_or_duplicates(
         await notified.wait()
 
     notified.clear()
+    idle_starts = server.idle_starts
     assert server.drop_connections() == 1
-    await wait_for(lambda: server.connections == 1)
+    # Erst zustellen, wenn der Client wieder im IDLE haengt: Eine offene Verbindung
+    # allein heisst nicht, dass er schon nachgelesen hat — eine Mail zwischen seiner
+    # Suche und dem IDLE meldet der Fake-Server nie, der Test liefe in den Timeout.
+    await wait_for(lambda: server.connections == 1 and server.idle_starts > idle_starts)
 
     server.add_message(build_message(subject="Nach dem Abriss"))
     async with asyncio.timeout(TIMEOUT):
