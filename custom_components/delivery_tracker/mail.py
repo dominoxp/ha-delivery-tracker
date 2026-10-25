@@ -432,6 +432,10 @@ def parse_mail(raw: bytes, *, uid: int | None = None, folder: str | None = None)
     if html is not None and len(text) < MIN_USEFUL_TEXT:
         # Reine HTML-Mail oder ein Text-Teil, der nur auf HTML verweist.
         text = html_to_text(html)[:MAX_BODY_LENGTH]
+    elif _HTML_HINT.search(text):
+        # Text-Teil mit HTML darin (DHL): Tags und Entities wie `&nbsp;` wuerden
+        # sonst in Feldern landen und Saetze fuer die Regeln zerreissen.
+        text = html_to_text(text)[:MAX_BODY_LENGTH]
 
     from_name, from_address = parseaddr(decode_header_value(message.get("From")))
 

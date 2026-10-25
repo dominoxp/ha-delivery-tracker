@@ -32,6 +32,7 @@ ALLE_MAILS = [
     "nachbar.eml",
     "packstation.eml",
     "filiale.eml",
+    "unterwegs_zur_filiale.eml",
     "zustellversuch.eml",
     "wunschtag.eml",
     "retoure.eml",
@@ -131,6 +132,23 @@ def test_filialzustellung(email_fixture: Loader):
     assert shipment.pickup_location == "DHL Filiale 456, Musterplatz 2, 12345 Musterstadt"
     assert shipment.tracking_number == "560032240131"
     assert shipment.tracking_url == f"{PARCEL_URL}560032240131"
+
+
+def test_unterwegs_zur_filiale(email_fixture: Loader):
+    """„In Kuerze abholbereit" ist noch unterwegs — abholbereit ab dem naechsten Werktag.
+
+    Die Mail kam an einem Samstag; Werktag ist auch der Samstag, also folgt
+    der Montag. In der Nacht dazwischen endet die Sommerzeit. Wie im Original
+    steckt HTML im Text-Teil; der Absender steht nur im Betreff.
+    """
+    shipment = _one(email_fixture, "unterwegs_zur_filiale.eml")
+
+    assert shipment.status is ShipmentStatus.IN_TRANSIT
+    assert shipment.tracking_number == "432030711769"
+    assert shipment.sender == "Kaffeerösterei Nord"
+    assert shipment.pickup_location == "Paketshop 785"
+    assert shipment.eta_start == datetime(2026, 10, 25, 23, 0, tzinfo=UTC)
+    assert shipment.eta_end == datetime(2026, 10, 26, 23, 0, tzinfo=UTC)
 
 
 def test_zustellversuch(email_fixture: Loader):

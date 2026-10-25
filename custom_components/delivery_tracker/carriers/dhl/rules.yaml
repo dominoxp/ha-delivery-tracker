@@ -81,6 +81,14 @@ status_map:
       - "r(?:ue|[uü])cksendung[^\\n]{0,30}(?:angek(?:ue|[uü])ndigt|angemeldet|vorbereitet)"
       - "retoure[^\\n]{0,30}(?:angek(?:ue|[uü])ndigt|angemeldet|erstellt)"
       - "retourenschein[^\\n]{0,20}(?:liegt bereit|erstellt)"
+  # Unterwegs zur Filiale: „ist in Kuerze in der Filiale abholbereit" kuendigt
+  # die Abholung erst an — „liegt … ab dem naechsten Werktag zur Abholung
+  # bereit" in derselben Mail wuerde sonst die Abhol-Regel ausloesen.
+  - status: in_transit
+    patterns:
+      - "in k[uü]rze[^\\n]{0,40}(?:abholbereit|zur abholung)"
+      - "status\\s+heute\\s+nicht\\s+mehr\\s+aktualisiert"
+      - "ab\\s+dem\\s+n[aä]chsten\\s+werktag[^\\n]{0,60}zur abholung bereit"
   - status: ready_for_pickup
     patterns:
       - "liegt[^\\n]{0,40}(?:zur abholung|abholbereit)"
@@ -120,6 +128,9 @@ status_map:
 # den Text fuer die Datumsauswertung. Genaues gehoert deshalb nach oben.
 dates:
   eta_patterns:
+    # Ohne die Uhrzeit: „ab 11 Uhr" ist kein Fenster, sondern ein Beginn. DHL
+    # bricht den Satz mitten in „ab dem" um, daher `\s+` statt Leerzeichen.
+    - "ab\\s+dem\\s+(?P<value>n[aä]chsten\\s+werktag)"
     - "zustellzeitfenster:?\\s*(?P<value>[^\\n]{3,90})"
     # „Ihr neuer voraussichtlicher Zustelltag ist" — das Datum steht in der
     # naechsten Zeile, deshalb hier bewusst ein Umbruch-freundliches `\s*`.
@@ -140,6 +151,9 @@ fields:
     - "absender:?\\s*(?P<value>[^\\n]{2,60})"
     - "im auftrag von\\s*(?P<value>[^\\n]{2,60})"
     - "versender:?\\s*(?P<value>[^\\n]{2,60})"
+    # Betreff „Ihre Quant Electronic GmbH Sendung ist …" — „Ihre DHL Sendung"
+    # nennt nur den Zusteller.
+    - "^ihre (?!dhl\\b)(?P<value>[^\\n]{2,60}?) sendung (?:ist|kommt|wird|wurde|liegt)\\b"
   description:
     - "inhalt:?\\s*(?P<value>[^\\n]{2,80})"
   # DHL nennt die Bestellnummer des Haendlers, wenn der Versender sie mitgibt —
@@ -150,11 +164,12 @@ fields:
   # Dashboard, der Code ist ein Geheimnis und wird nicht mit angezeigt.
   # Filiale und Paketshop nur mit Nummer: „geben Sie das Paket in einer Filiale
   # ab" nennt keinen Abholort, sondern eine Abgabestelle fuer die Retoure.
+  # Vor „(" ist Schluss: Dort folgt die URL eines verlinkten Abholorts.
   pickup_location:
     - "abholort:?\\s*(?P<value>[^\\n]{2,80})"
-    - "(?P<value>packstation\\s*\\d{1,4}[^\\n]{0,70})"
-    - "(?P<value>(?:post)?filiale\\s*\\d{1,4}[^\\n]{0,70})"
-    - "(?P<value>paketshop\\s*\\d{1,4}[^\\n]{0,70})"
+    - "(?P<value>packstation\\s*\\d{1,4}[^\\n(]{0,70})"
+    - "(?P<value>(?:post)?filiale\\s*\\d{1,4}[^\\n(]{0,70})"
+    - "(?P<value>paketshop\\s*\\d{1,4}[^\\n(]{0,70})"
     - "nachbarn?[^\\n]{0,20}:\\s*(?P<value>[^\\n]{2,80})"
     - "abholen (?:bei|in|im)\\s*(?P<value>[^\\n]{2,80})"
   pickup_code:
