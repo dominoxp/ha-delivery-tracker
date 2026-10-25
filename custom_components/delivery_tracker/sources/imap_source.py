@@ -547,6 +547,14 @@ class ImapSource(TrackingSource):
         # `charset=None` laesst das `CHARSET`-Argument weg; die Kriterien sind rein ASCII
         # und manche Server lehnen CHARSET bei SEARCH ab.
         response = await client.uid_search(*criteria, charset=None)
+        if response.result != "OK" and self._rescan_after is not None:
+            # Die umgebauten Kriterien sind dem Server womoeglich nicht recht.
+            # Kein Verbindungsproblem: Neu-Einlesen aufgeben, normal weiterlaufen.
+            _LOGGER.warning(
+                "%s: Neu-Einlesen abgebrochen, SEARCH %s abgelehnt", self, " ".join(criteria)
+            )
+            self._rescan_after = None
+            return []
         if response.result != "OK":
             raise ImapConnectionError(f"SEARCH {' '.join(criteria)} fehlgeschlagen")
         if not response.lines:
@@ -567,11 +575,7 @@ class ImapSource(TrackingSource):
             if self.config.lookback_days > 0:
                 since = dt_util.utcnow() - timedelta(days=self.config.lookback_days)
                 criteria += ["SINCE", _imap_date(since)]
-            criteria += [
-                token
-                for token in self.config.search.split()
-                if token.upper() not in _READ_STATE_CRITERIA
-            ]
+            criteria += _without_read_state(self.config.search.split())
             return tuple(criteria) or ("ALL",)
         if self.progress.last_uid:
             criteria += ["UID", f"{self.progress.last_uid + 1}:*"]
@@ -873,3 +877,24 @@ def _quote_mailbox(name: str) -> str:
 def _imap_date(value: datetime) -> str:
     """Ein Datum im IMAP-Format `01-Jan-2026`."""
     return f"{value.day:02d}-{_IMAP_MONTHS[value.month - 1]}-{value.year}"
+
+
+def _without_read_state(tokens: Iterable[str]) -> list[str]:
+    """Suchkriterien ohne Bedingung auf den Lesestatus — fuer das Neu-Einlesen.
+
+    Jede solche Bedingung wird zu `ALL`, ein vorangestelltes `NOT` gleich mit:
+    Einfach weglassen hinterliesse bei `NOT SEEN` ein `NOT` ohne Argument und
+    bei `OR UNSEEN FLAGGED` ein `OR` mit nur einem — beides lehnt der Server ab.
+    Ein alleinstehendes `ALL` neben anderen Kriterien schadet nicht, IMAP
+    verknuepft alles mit UND.
+    """
+    result: list[str] = []
+    for token in tokens:
+        if token.upper() not in _READ_STATE_CRITERIA:
+            result.append(token)
+        elif result and result[-1].upper() == "NOT":
+            result[-1] = "ALL"
+        else:
+            result.append("ALL")
+    # Bleibt nur `ALL` uebrig, ist es dasselbe wie gar kein Kriterium.
+    return [] if all(token.upper() == "ALL" for token in result) else result

@@ -240,6 +240,14 @@ _LINK_SCHEMES: Final[tuple[str, ...]] = ("http://", "https://")
 MAX_LINK_LENGTH: Final = 400
 
 _TAGS: Final = re.compile(r"<[^>]*>")
+# HTML-Reste in schon aufbereitetem Text („Paketshop 785</a><br />"). Enger als
+# `_TAGS`, damit ein freistehendes „<" im Text stehen bleibt.
+_TAG_REMNANT: Final = re.compile(r"</?[a-zA-Z][a-zA-Z0-9]*(?:\s[^<>]*)?/?>")
+
+
+def strip_tags(text: str) -> str:
+    """HTML-Reste durch Leerzeichen ersetzen — fuer Anzeige und Adressvorschlag."""
+    return _TAG_REMNANT.sub(" ", text)
 
 
 class _TextExtractor(HTMLParser):

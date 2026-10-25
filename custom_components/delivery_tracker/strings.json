@@ -442,7 +442,9 @@
         "col_from": "Von",
         "col_result": "Ergebnis",
         "rescan_started": "Neu-Einlesen gestartet: {mailboxes}. Je nach Postfach dauert das einige Sekunden bis Minuten.",
-        "rescan_running": "Das Postfach wird gerade neu eingelesen …"
+        "rescan_running": "Das Postfach wird gerade neu eingelesen …",
+        "format_date": "%d.%m.%Y",
+        "format_datetime": "%d.%m.%Y %H:%M"
       }
     }
   },

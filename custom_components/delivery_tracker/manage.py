@@ -23,12 +23,11 @@ from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
 from .const import DESTINATION_UNKNOWN, DESTINATION_UNKNOWN_NAME, DOMAIN
+from .mail import strip_tags
 from .models import Shipment
 from .pipeline import MailLogEntry, MailOutcome
 from .store import Expiry, ExpiryRule
 
-# HTML-Reste, die ein Parser aus der Mail mitgenommen hat („Paketshop 785</a><br />").
-_TAG: Final = re.compile(r"</?[a-zA-Z][a-zA-Z0-9]*(?:\s[^<>]*)?/?>")
 # Zeichen, die in einer Markdown-Zeile oder Tabelle etwas bedeuten.
 _MARKDOWN: Final = re.compile(r"([\\`*_\[\]<>|#])")
 # Obergrenze fuer Betreffs und Absender in Tabellen.
@@ -37,6 +36,9 @@ MAX_CELL_LENGTH: Final = 90
 TEXT_KEYS: Final = "manage_text"
 # Platzhalter fuer fehlende Werte.
 EMPTY: Final = "-"
+# Datumsformate, falls die Uebersetzung keine nennt (`manage_text.format_*`).
+DATE_FORMAT: Final = "%Y-%m-%d"
+DATETIME_FORMAT: Final = "%Y-%m-%d %H:%M"
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +51,12 @@ class Texts:
         """Ein Text aus `selector.manage_text`, Platzhalter ersetzt."""
         text = self.strings.get(f"{TEXT_KEYS}.{key}", key)
         return text.format(**values) if values else text
+
+    def date_format(self, *, with_time: bool) -> str:
+        """strftime-Format der Sprache; Zeitangaben schreibt jede Sprache anders."""
+        if with_time:
+            return self.strings.get(f"{TEXT_KEYS}.format_datetime", DATETIME_FORMAT)
+        return self.strings.get(f"{TEXT_KEYS}.format_date", DATE_FORMAT)
 
     def status(self, value: str) -> str:
         """Anzeigename eines `ShipmentStatus`."""
@@ -75,24 +83,24 @@ async def async_load_texts(hass: HomeAssistant) -> Texts:
 
 def md(value: object, limit: int | None = None) -> str:
     """Freitext so maskieren, dass er Markdown und Tabellen nicht zerlegt."""
-    text = " ".join(_TAG.sub(" ", str(value)).split())
+    text = " ".join(strip_tags(str(value)).split())
     if limit is not None and len(text) > limit:
         text = text[: limit - 1].rstrip() + "…"
     return _MARKDOWN.sub(r"\\\1", text)
 
 
-def format_dt(value: datetime | None) -> str:
-    """Zeitpunkt in Ortszeit, kurz und sprachneutral."""
+def format_dt(texts: Texts, value: datetime | None) -> str:
+    """Zeitpunkt in Ortszeit, im Format der Sprache."""
     if value is None:
         return EMPTY
-    return dt_util.as_local(value).strftime("%d.%m.%Y %H:%M")
+    return dt_util.as_local(value).strftime(texts.date_format(with_time=True))
 
 
-def format_date(value: datetime | None) -> str:
-    """Datum in Ortszeit."""
+def format_date(texts: Texts, value: datetime | None) -> str:
+    """Datum in Ortszeit, im Format der Sprache."""
     if value is None:
         return EMPTY
-    return dt_util.as_local(value).strftime("%d.%m.%Y")
+    return dt_util.as_local(value).strftime(texts.date_format(with_time=False))
 
 
 def _days_between(earlier: datetime, later: datetime) -> int:
@@ -127,12 +135,12 @@ def expiry_short(texts: Texts, expiry: Expiry, now: datetime) -> str:
 def expiry_long(texts: Texts, shipment: Shipment, expiry: Expiry, now: datetime) -> str:
     """Ausfuehrliche Begruendung fuer die Detailansicht."""
     if expiry.rule is ExpiryRule.CLOSED:
-        reason = texts.get("rule_closed", since=format_date(shipment.closed_at))
+        reason = texts.get("rule_closed", since=format_date(texts, shipment.closed_at))
     else:
-        reason = texts.get("rule_stale", since=format_date(shipment.last_updated))
+        reason = texts.get("rule_stale", since=format_date(texts, shipment.last_updated))
     if expiry.at is None:
         return f"{reason} {texts.get('rule_off')}"
-    removal = texts.get("rule_at", date=format_date(expiry.at))
+    removal = texts.get("rule_at", date=format_date(texts, expiry.at))
     return f"{reason} {removal} ({expiry_short(texts, expiry, now)})"
 
 
@@ -216,10 +224,13 @@ def shipment_details(
             md(shipment.destination_raw) if shipment.destination_raw else texts.get("none_found"),
         ),
         ("field_pickup", _pickup(shipment)),
-        ("field_eta", _eta(shipment)),
-        ("field_delivered_at", format_dt(shipment.delivered_at) if shipment.delivered_at else None),
-        ("field_first_seen", format_dt(shipment.first_seen)),
-        ("field_last_updated", format_dt(shipment.last_updated)),
+        ("field_eta", _eta(texts, shipment)),
+        (
+            "field_delivered_at",
+            format_dt(texts, shipment.delivered_at) if shipment.delivered_at else None,
+        ),
+        ("field_first_seen", format_dt(texts, shipment.first_seen)),
+        ("field_last_updated", format_dt(texts, shipment.last_updated)),
         ("field_id", f"`{shipment.id}`"),
     ]
     lines = [f"- **{texts.get(key)}:** {value}" for key, value in facts if value]
@@ -253,12 +264,12 @@ def _pickup(shipment: Shipment) -> str | None:
     return " · ".join(parts) or None
 
 
-def _eta(shipment: Shipment) -> str | None:
+def _eta(texts: Texts, shipment: Shipment) -> str | None:
     if shipment.eta_start is None:
         return None
     if shipment.eta_end is None or shipment.eta_end == shipment.eta_start:
-        return format_dt(shipment.eta_start)
-    return f"{format_dt(shipment.eta_start)} - {format_dt(shipment.eta_end)}"
+        return format_dt(texts, shipment.eta_start)
+    return f"{format_dt(texts, shipment.eta_start)} - {format_dt(texts, shipment.eta_end)}"
 
 
 def _header(texts: Texts, *columns: str) -> str:
@@ -276,7 +287,7 @@ def _events_table(texts: Texts, shipment: Shipment) -> str:
             md(value, MAX_CELL_LENGTH) for value in (event.text, event.location) if value
         )
         status = texts.status(event.status.value)
-        rows.append(f"| {format_dt(event.timestamp)} | {status} | {detail or EMPTY} |")
+        rows.append(f"| {format_dt(texts, event.timestamp)} | {status} | {detail or EMPTY} |")
     return "\n".join(rows)
 
 
@@ -287,9 +298,8 @@ def _sources_table(texts: Texts, shipment: Shipment) -> str:
     for record in sorted(shipment.sources, key=lambda item: item.fetched_at, reverse=True):
         subject = md(record.subject, MAX_CELL_LENGTH) if record.subject else EMPTY
         sender = md(record.sender, MAX_CELL_LENGTH) if record.sender else EMPTY
-        rows.append(
-            f"| {format_dt(record.fetched_at)} | {md(record.source_id)} | {subject} | {sender} |"
-        )
+        time = format_dt(texts, record.fetched_at)
+        rows.append(f"| {time} | {md(record.source_id)} | {subject} | {sender} |")
     return "\n".join(rows)
 
 
@@ -315,7 +325,7 @@ def mail_log(
         rows = [_header(texts, "col_time", "col_result", "col_subject", "col_from")]
         for entry in shown:
             rows.append(
-                f"| {format_dt(entry.received_at or entry.processed_at)} "
+                f"| {format_dt(texts, entry.received_at or entry.processed_at)} "
                 f"| {_outcome_cell(texts, entry, carriers)} "
                 f"| {md(entry.subject, MAX_CELL_LENGTH) if entry.subject else EMPTY} "
                 f"| {md(entry.sender, MAX_CELL_LENGTH) if entry.sender else EMPTY} |"

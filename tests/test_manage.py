@@ -279,6 +279,20 @@ async def test_details_zeigen_verfall_verlauf_und_mails(
     assert "**Erkannte Lieferadresse:** Kiosk Ecke, Nebenweg 5, 12345 Dorf" in details["facts"]
 
 
+async def test_details_datum_im_format_der_sprache(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """Englische Oberflaeche: Datum als ISO statt deutscher Schreibweise."""
+    hass.config.language = "en"
+    entry = await setup_with(hass, hass_storage, beispieldaten())
+    result = await open_details(hass, entry, "alt")
+
+    details = result["description_placeholders"]
+    assert "Not delivered, last mail on 2026-08-30." in details["expiry"]
+    assert "Will be removed automatically on 2026-10-29" in details["expiry"]
+    assert "30.08.2026" not in details["facts"]
+
+
 async def test_details_zurueck_zur_liste_und_loeschen(
     hass: HomeAssistant, hass_storage: dict[str, Any]
 ) -> None:

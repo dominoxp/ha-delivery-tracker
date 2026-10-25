@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from .const import DESTINATION_UNKNOWN
-from .mail import MailMessage
+from .mail import MailMessage, strip_tags
 from .models import Destination, Shipment
 
 _LOGGER = logging.getLogger(__name__)
@@ -442,7 +442,6 @@ def enrich_from_mail(shipments: Sequence[Shipment], mail: MailMessage) -> None:
 # Vorschlag: aus einer erkannten Adresse einen Zielort machen
 # ----------------------------------------------------------------------
 
-_SUGGEST_TAG: Final = re.compile(r"</?[a-zA-Z][a-zA-Z0-9]*(?:\s[^<>]*)?/?>")
 # Teile einer Adresszeile: Komma, Semikolon, Zeilenumbruch oder ein freistehender Strich.
 _SUGGEST_SEPARATOR: Final = re.compile(r"\s*[,;\n]\s*|\s+[-\u2013\u2014|]\s+")
 _SUGGEST_POSTAL_CITY: Final = re.compile(
@@ -496,7 +495,7 @@ def suggest_destination(text: str | None) -> DestinationSuggestion:
         "post_numbers": [],
         "keywords": [],
     }
-    rest = _SUGGEST_TAG.sub(" ", text or "")
+    rest = strip_tags(text or "")
     label: str | None = None
 
     def take(pattern: re.Pattern[str], handle: Callable[[re.Match[str]], None]) -> None:

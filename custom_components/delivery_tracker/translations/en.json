@@ -442,7 +442,9 @@
         "col_from": "From",
         "col_result": "Result",
         "rescan_started": "Re-reading started: {mailboxes}. Depending on the mailbox this takes a few seconds to minutes.",
-        "rescan_running": "The mailbox is being re-read …"
+        "rescan_running": "The mailbox is being re-read …",
+        "format_date": "%Y-%m-%d",
+        "format_datetime": "%Y-%m-%d %H:%M"
       }
     }
   },
