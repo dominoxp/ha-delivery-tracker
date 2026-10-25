@@ -111,11 +111,11 @@ def test_html_mail_liefert_lesbaren_text_mit_links(email_fixture: Loader):
 def test_text_teil_mit_html_wird_bereinigt():
     """Manche Zusteller (DHL) schicken HTML im Text-Teil — Tags und Entities fallen weg."""
     raw = (
-        "Subject: Test\n"
-        "Content-Type: text/plain; charset=UTF-8\n\n"
-        "Abholbereit ab dem n&auml;chsten&nbsp;Werktag.<br />\n"
-        '<a href="https://example.org/shop">Paketshop 785</a><br />\n'
-    ).encode()
+        b"Subject: Test\n"
+        b"Content-Type: text/plain; charset=UTF-8\n\n"
+        b"Abholbereit ab dem n&auml;chsten&nbsp;Werktag.<br />\n"
+        b'<a href="https://example.org/shop">Paketshop 785</a><br />\n'
+    )
 
     mail = parse_mail(raw)
 
@@ -127,9 +127,9 @@ def test_text_teil_mit_html_wird_bereinigt():
 def test_reiner_text_bleibt_unveraendert():
     """Ohne Tags wird nichts umgewandelt — auch kein „&" in Firmennamen."""
     raw = (
-        "Subject: Test\nContent-Type: text/plain; charset=UTF-8\n\n"
-        "Absender: Mueller & Soehne\nSendungsnummer: 123\n"
-    ).encode()
+        b"Subject: Test\nContent-Type: text/plain; charset=UTF-8\n\n"
+        b"Absender: Mueller & Soehne\nSendungsnummer: 123\n"
+    )
 
     assert parse_mail(raw).text == "Absender: Mueller & Soehne\nSendungsnummer: 123"
 
