@@ -9,6 +9,7 @@ import { html, svg, type SVGTemplateResult, type TemplateResult } from "lit";
 
 const MONOGRAMS: Record<string, string> = {
   dhl: "DHL",
+  aliexpress: "AE",
   amazon: "a",
   dpd: "DPD",
   gls: "GLS",

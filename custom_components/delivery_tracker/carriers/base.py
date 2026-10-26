@@ -24,6 +24,14 @@ from .rules import RULES_FILENAME, CarrierRules, load_rules
 class CarrierPlugin(ABC):
     """Basisklasse aller Zusteller-Plugins."""
 
+    marketplace: bool = False
+    """Ein Haendler, der fremde Zusteller beauftragt (AliExpress), statt selbst zu liefern.
+
+    Nennt seine Mail eine Nummer, die ein anderes Plugin als seine erkennt
+    (Hermes, DHL), uebergibt die Registry die Sendung an diesen Zusteller —
+    dann landen dessen eigene Mails ueber dieselbe ID in derselben Sendung.
+    """
+
     def __init__(self, carrier_id: str, name: str, *, priority: int = 0) -> None:
         """Plugin mit seiner ID, dem Anzeigenamen und seiner Rangfolge anlegen."""
         self.carrier_id = carrier_id

@@ -1,0 +1,107 @@
+# Regelsatz AliExpress (Bestellung, Paket, Sammelpaket).
+#
+# Die Muster sind an echten Mails von 2026 gebaut. AliExpress schreibt je nach
+# Mail deutsch oder englisch, auch innerhalb derselben Bestellung. Drei
+# Eigenheiten praegen den Regelsatz:
+#
+# 1. Ausgewertet wird nur der Betreff. Der Text jeder Mail enthaelt Werbung
+#    („-50%", „Das koennte Ihnen auch gefallen") und eine Fortschrittsanzeige;
+#    der Betreff dagegen nennt genau einen Stand. Die Statusregeln wendet das
+#    Plugin (`__init__.py`) deshalb auf den Betreff an — und bei Sammelmails
+#    auf die Statuszeile je Paket („Cleared customs").
+# 2. Mails ohne Statusaussage („Wie war Ihr Einkaufserlebnis?", „auf
+#    Bestaetigung wird gewartet", „Neuer Lieferstatus") passen auf keine
+#    Regel und aendern nichts. Die ersten beiden kommen per Zeitplan, auch wenn
+#    das Paket noch gar nicht da ist.
+# 3. Unterwegs wechselt die Nummer: Zubringer `LP…`/`CNG…`, Sammelpaket `AP…`,
+#    dann die Nummer von Hermes oder DHL. Hier stehen nur die Formate von
+#    Cainiao; die Nummern der letzten Meile erkennen deren Plugins, und die
+#    Registry uebergibt die Sendung (`marketplace`).
+
+carrier: aliexpress
+name: AliExpress
+
+match:
+  from_domains:
+    - aliexpress.com
+  # Nur Transaktionsmails: Werbung kommt von derselben Domain, traegt aber
+  # keinen dieser Betreffs — und die Domain allein reicht nie.
+  subject_patterns:
+    - "^(?:bestellung|order)\\s+\\d{12,20}\\s*:"
+    - "^(?:package|packst[uü]ck|paket)\\s+[A-Z]{0,4}\\d{8,24}"
+    - "^zollabfertigung f[uü]r\\s+[A-Z]{0,4}\\d{8,24}"
+    - "^delivery issue for package"
+    - "^your \\d+ packages have delivery updates"
+    - "^ihre \\d+ pakete"
+    - "^your order \\d{12,20} is closed"
+    - "^ihre bestellung \\d{12,20} wurde geschlossen"
+  # Damit auch Werbung, Coupons und Bewertungsmails bei AliExpress landen —
+  # als erkannt, aber ohne Sendung. Sonst nimmt sie ein Zusteller, dessen
+  # Nummernformat zufaellig auf die 16-stellige Bestellnummer passt.
+  body_patterns:
+    - "aliexpress\\.com"
+
+tracking:
+  # Cainiao: Zubringer `LP`/`CNG`, Sammelpaket `AP`. Ohne Pruefverfahren —
+  # die Praefixe sind eindeutig genug.
+  patterns:
+    - "\\b((?:LP|CNG|AP)\\d{12,16})\\b"
+  url: "https://global.cainiao.com/newDetail.htm?mailNoList={tracking_number}"
+  checksum: []
+  require_context: false
+
+# Spezielles zuerst. Jedes Muster passt auf den Betreff *oder* auf die
+# Statuszeile eines Pakets in der Sammelmail; die deutschen Fassungen ohne
+# Beleg in einer echten Mail sind als Vermutung markiert.
+status_map:
+  - status: delivered
+    patterns:
+      - "has been delivered"
+      - "wurde (?:erfolgreich )?zugestellt"
+      - "^(?:package delivered|paket zugestellt)$"
+  - status: delivery_failed
+    patterns:
+      - "delivery issue"
+      # Vermutung
+      - "zustellproblem|problem bei der zustellung|zustellung (?:ist )?fehlgeschlagen"
+  - status: ready_for_pickup
+    patterns:
+      - "ready for pickup"
+      # Vermutung
+      - "abholbereit|zur abholung bereit|kann abgeholt werden"
+  - status: out_for_delivery
+    patterns:
+      - "out for (?:re)?delivery"
+      - "neuzustellung"
+      - "wird zugestellt"
+      - "^zur auslieferung bereit$"
+  - status: in_transit
+    patterns:
+      - "with local carrier"
+      - "at carrier facility"
+      - "in your country/region"
+      - "left the departure region"
+      - "collected by (?:the )?(?:local )?carrier"
+      - "has an update"
+      - "cleared customs"
+      - "^in (?:global )?transit$"
+      - "mit lokalem kurier"
+      - "lokal unterwegs"
+      - "in ihrem land"
+      - "abflugregion verlassen"
+      - "hat eine aktualisierung"
+      - "zollabfertigung[^\\n]{0,40}(?:beendet|abgeschlossen)"
+      - "^im globalen transit$"
+      - "bestellung versandt"
+      - "order (?:has been )?shipped"
+      # Vermutung
+      - "(?:versandpartner|kurier|spediteur)[^\\n]{0,30}abgeholt"
+  - status: label_created
+    patterns:
+      - "ready to ship"
+      # Vermutung
+      - "versandbereit|bereit (?:zum|f[uü]r den) versand"
+  - status: ordered
+    patterns:
+      - "bestellauftrag best[aä]tigt"
+      - "order confirmed"

@@ -519,14 +519,18 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
             results = await asyncio.gather(*(self._async_fetch(handle, now) for handle in due))
 
             changes: list[StatusChange] = []
+            cancelled: list[str] = []
             for shipments in results:
                 for incoming in shipments:
-                    changes.extend(self._async_upsert(incoming))
+                    if incoming.cancelled:
+                        cancelled.extend(self._async_cancel(incoming))
+                    else:
+                        changes.extend(self._async_upsert(incoming))
 
             consolidated = self._async_consolidate()
             changes.extend(consolidated[0])
             self.store.async_assign_destinations(self._matcher)
-            removed = [*consolidated[1], *self.store.async_purge(now=now)]
+            removed = [*cancelled, *consolidated[1], *self.store.async_purge(now=now)]
             self._async_persist_progress()
             async_sync_source_issues(self.hass, self.config_entry, self.sources)
             return self._build_data(now, changes, removed)
@@ -543,6 +547,23 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     StatusChange(after.id, before.status if before else None, after.status, after)
                 )
         return changes, removed
+
+    @callback
+    def _async_cancel(self, incoming: Shipment) -> list[str]:
+        """Die Sendung einer stornierten Bestellung entfernen; die entfernte ID.
+
+        Nur solange sie eine reine Bestellung ist: Steckt die Bestellung schon
+        in einem Paket mit Trackingnummer, ist dieses Paket unterwegs und
+        enthaelt womoeglich weitere Bestellungen — dann bleibt es stehen.
+        """
+        shipment_id = self.store.resolve(incoming.id)
+        existing = self.store.get(shipment_id)
+        if existing is None or existing.tracking_number or existing.is_closed:
+            return []
+        _LOGGER.debug(
+            "Bestellung %s storniert, Sendung %s entfernt", incoming.order_number, shipment_id
+        )
+        return [shipment_id] if self.store.async_remove(shipment_id) else []
 
     @callback
     def _async_upsert(self, incoming: Shipment) -> list[StatusChange]:

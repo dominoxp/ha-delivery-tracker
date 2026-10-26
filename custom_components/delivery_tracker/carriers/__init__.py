@@ -24,6 +24,7 @@ from homeassistant.core import HomeAssistant
 
 from ..const import DOMAIN
 from ..mail import MailMessage
+from ..merge import build_shipment_id
 from ..models import Shipment
 from ..tracking import ChecksumResult
 from .base import CarrierPlugin, RulesCarrier
@@ -149,6 +150,8 @@ class CarrierRegistry:
                 failed = True
                 continue
             if shipments:
+                if plugin.marketplace:
+                    shipments = [self._hand_over(plugin, shipment) for shipment in shipments]
                 _LOGGER.debug(
                     "Mail %s -> Plugin '%s' (Bewertung %d), Sendungen: %s",
                     mail.message_id,
@@ -169,6 +172,36 @@ class CarrierRegistry:
             return Resolution([])
         plugin, score = found[0]
         return Resolution([], plugin, score, len(found), failed=failed)
+
+    def _hand_over(self, marketplace: CarrierPlugin, shipment: Shipment) -> Shipment:
+        """Die Sendung eines Marktplatzes an den Zusteller ihrer Nummer uebergeben.
+
+        Uebernommen wird nur ein eindeutiger Treffer: eine stimmende
+        Pruefziffer, oder — bei Formaten ohne Pruefverfahren wie Hermes `H…` —
+        ein einziges Plugin, das die Nummer ueberhaupt annimmt. Fallbacks mit
+        negativer Prioritaet (`generic`) raten nur und zaehlen nicht. Der
+        Marktplatz bleibt als Absender stehen.
+        """
+        number = shipment.tracking_number
+        if not number:
+            return shipment
+        found = [
+            (plugin, result)
+            for plugin, result in self.identify(number)
+            if plugin is not marketplace and plugin.priority >= 0
+        ]
+        valid = [plugin for plugin, result in found if result is ChecksumResult.VALID]
+        if valid:
+            target = valid[0]
+        elif len(found) == 1:
+            target = found[0][0]
+        else:
+            return shipment
+        carrier = target.carrier_for_number(number)
+        shipment.id = build_shipment_id(carrier, number)
+        shipment.carrier = carrier
+        shipment.tracking_url = target.tracking_url(number) or shipment.tracking_url
+        return shipment
 
     def identify(self, number: str) -> list[tuple[CarrierPlugin, ChecksumResult]]:
         """Alle Plugins, deren Format eine normalisierte Nummer annimmt, bestes zuerst.

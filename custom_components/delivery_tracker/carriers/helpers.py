@@ -14,7 +14,7 @@ from typing import Final
 
 from homeassistant.util import dt as dt_util
 
-from ..const import SOURCE_IMAP
+from ..const import MAX_VALUE_LENGTH, SOURCE_IMAP
 from ..dates import parse_eta
 from ..mail import MailMessage
 from ..merge import build_shipment_id
@@ -34,10 +34,6 @@ WEIGHT_BODY: Final = 10
 # derselben Absender-Domain auch Werbung; eine echte Versandbenachrichtigung
 # traegt dagegen praktisch immer eine Nummer.
 MALUS_BULK: Final = 25
-
-# Obergrenze fuer aus Mailtext extrahierte Werte — schuetzt vor Regex, die
-# versehentlich den halben Body einfangen.
-MAX_VALUE_LENGTH: Final = 200
 
 _WHITESPACE: Final = re.compile(r"\s+")
 

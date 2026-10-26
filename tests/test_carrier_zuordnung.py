@@ -38,6 +38,7 @@ def _fixtures(carrier: str, *ausser: str) -> list[str]:
 def test_alle_zusteller_sind_geladen():
     """Ein Plugin mit kaputter `rules.yaml` wuerde hier still fehlen."""
     assert REGISTRY.carrier_ids == [
+        "aliexpress",
         "amazon",
         "dhl",
         "dpd",
