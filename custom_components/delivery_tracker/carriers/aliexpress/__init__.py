@@ -67,8 +67,12 @@ _CLOSED_SUBJECT: Final = re.compile(
 )
 
 # Die Verfolgen-Links. Nur ihr Ziel verbindet ein Paket mit seinen Bestellungen.
+# Der Linktext endet spaetestens am naechsten `<a`: Mit `.*?` liefe jeder
+# unverschlossene Link bis ans Mailende, und eine praeparierte Mail voller
+# offener Links legte die Event-Loop sekundenlang lahm.
 _LINK: Final = re.compile(
-    r"<a\b[^>]*?\shref\s*=\s*[\"'](?P<href>[^\"']*?/p/tracking/[^\"']*)[\"'][^>]*>(?P<inner>.*?)</a\s*>",
+    r"<a\b[^>]*?\shref\s*=\s*[\"'](?P<href>[^\"']*?/p/tracking/[^\"']*)[\"'][^>]*>"
+    r"(?P<inner>(?:(?!</?a\b).)*)</a\s*>",
     re.IGNORECASE | re.DOTALL,
 )
 _NUMBER: Final = re.compile(r"^[A-Z]{0,4}\d{8,24}[A-Z]{0,3}$")
