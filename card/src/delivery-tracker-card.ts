@@ -44,7 +44,9 @@ interface RowContext {
  *
  * Nutzt vom HA-Frontend nur `ha-card` und die Theme-Variablen; Farben kommen
  * ausschliesslich aus dem Theme, damit helles und dunkles Theme passen.
- * Die Karte liest nur das Attribut und ruft keine Action auf.
+ * Die Karte liest nur das Attribut. Die einzige Action, die sie aufruft, ist
+ * `delivery_tracker.mark_delivered` — und nur mit `mark_delivered: true` und
+ * nach Bestaetigung in der Karte.
  */
 export class DeliveryTrackerCard extends LitElement {
   static override properties = {
@@ -52,6 +54,9 @@ export class DeliveryTrackerCard extends LitElement {
     _config: { state: true },
     _expanded: { state: true },
     _tick: { state: true },
+    _confirming: { state: true },
+    _pending: { state: true },
+    _failed: { state: true },
   };
 
   declare hass?: HomeAssistant;
@@ -60,6 +65,12 @@ export class DeliveryTrackerCard extends LitElement {
   declare _expanded: ReadonlySet<string>;
   /** Minutentakt: „heute" wird um Mitternacht zu „gestern". */
   declare _tick: number;
+  /** Sendung, deren Markieren gerade bestaetigt werden soll. */
+  declare _confirming?: string;
+  /** Sendung, deren Markieren gerade laeuft. */
+  declare _pending?: string;
+  /** Fehlermeldung des letzten Markierens, je Sendung. */
+  declare _failed?: { id: string; message: string };
 
   private _timer?: ReturnType<typeof setInterval>;
 
@@ -117,7 +128,8 @@ export class DeliveryTrackerCard extends LitElement {
     if (!this._config) {
       return false;
     }
-    if (changed.has("_config") || changed.has("_expanded") || changed.has("_tick")) {
+    const own = ["_config", "_expanded", "_tick", "_confirming", "_pending", "_failed"] as const;
+    if (own.some((key) => changed.has(key))) {
       return true;
     }
     const oldHass = changed.get("hass") as HomeAssistant | undefined;
@@ -329,7 +341,7 @@ export class DeliveryTrackerCard extends LitElement {
     </span>`;
   }
 
-  /** Alles, was die Zeile weglaesst oder kuerzt, plus der Link zur Sendungsverfolgung. */
+  /** Alles, was die Zeile weglaesst oder kuerzt, plus Link und Markieren-Button. */
   private renderDetails(shipment: Shipment, { labels, format }: RowContext): TemplateResult {
     const rows: [StringKey, string | undefined][] = [
       ["field.tracking_number", shipment.tracking_number],
@@ -346,6 +358,7 @@ export class DeliveryTrackerCard extends LitElement {
       ["detail.last_updated", formatTimestamp(shipment.last_updated, format)],
     ];
     const url = safeTrackingUrl(shipment);
+    const markable = this._config?.mark_delivered && shipment.status !== "delivered";
     return html`<div class="details">
       <dl>
         ${rows
@@ -357,13 +370,108 @@ export class DeliveryTrackerCard extends LitElement {
           )}
       </dl>
       ${
-        url
-          ? html`<a class="tracking-link" href=${url} target="_blank" rel="noopener noreferrer"
-              >${iconExternal()}${localize(this.language, "detail.open_tracking")}</a
-            >`
+        url || markable
+          ? html`<div class="actions">
+              ${
+                url
+                  ? html`<a
+                      class="tracking-link"
+                      href=${url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      >${iconExternal()}${localize(this.language, "detail.open_tracking")}</a
+                    >`
+                  : nothing
+              }
+              ${markable ? this.renderMarkDelivered(shipment) : nothing}
+            </div>`
           : nothing
       }
     </div>`;
+  }
+
+  /**
+   * Abholstationen melden die Abholung nicht immer; dann bleibt die Sendung
+   * „abholbereit". Der Button setzt sie von Hand auf zugestellt — erst nach
+   * einer Rueckfrage direkt in der Karte, damit ein versehentlicher Tipp
+   * nichts aendert.
+   */
+  private renderMarkDelivered(shipment: Shipment): TemplateResult {
+    const pickup = shipment.status === "ready_for_pickup";
+    const failed = this._failed?.id === shipment.id ? this._failed.message : undefined;
+    const error = failed
+      ? html`<span class="action-error" role="alert"
+          >${localize(this.language, "action.failed", { error: failed })}</span
+        >`
+      : nothing;
+
+    if (this._confirming !== shipment.id) {
+      return html`<button
+          class="action mark-delivered"
+          type="button"
+          @click=${() => this.askMarkDelivered(shipment.id)}
+        >
+          ${iconCheck()}${localize(
+            this.language,
+            pickup ? "action.mark_picked_up" : "action.mark_delivered",
+          )}
+        </button>
+        ${error}`;
+    }
+
+    const busy = this._pending === shipment.id;
+    return html`<span class="confirm" role="group">
+        <span class="confirm-text"
+          >${localize(
+            this.language,
+            pickup ? "action.confirm_picked_up" : "action.confirm_delivered",
+          )}</span
+        >
+        <button
+          class="action confirm-yes"
+          type="button"
+          ?disabled=${busy}
+          @click=${() => this.markDelivered(shipment.id)}
+        >
+          ${iconCheck()}${localize(this.language, "action.confirm")}
+        </button>
+        <button
+          class="action confirm-no"
+          type="button"
+          ?disabled=${busy}
+          @click=${() => this.cancelMarkDelivered()}
+        >
+          ${localize(this.language, "action.cancel")}
+        </button>
+      </span>
+      ${error}`;
+  }
+
+  private askMarkDelivered(id: string): void {
+    this._failed = undefined;
+    this._confirming = id;
+  }
+
+  private cancelMarkDelivered(): void {
+    this._confirming = undefined;
+  }
+
+  private async markDelivered(id: string): Promise<void> {
+    if (!this.hass || this._pending) {
+      return;
+    }
+    this._pending = id;
+    this._failed = undefined;
+    try {
+      await this.hass.callService("delivery_tracker", "mark_delivered", { shipment_id: id });
+      this._confirming = undefined;
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : String((err as { message?: unknown })?.message ?? err);
+      this._failed = { id, message };
+    } finally {
+      this._pending = undefined;
+    }
   }
 
   private renderEmpty(key: StringKey): TemplateResult {
@@ -591,17 +699,67 @@ export class DeliveryTrackerCard extends LitElement {
       margin: 0;
       overflow-wrap: anywhere;
     }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 16px;
+      margin-top: 8px;
+    }
     .tracking-link {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      margin-top: 8px;
       color: var(--primary-color);
       text-decoration: none;
       font-weight: 500;
     }
     .tracking-link:hover {
       text-decoration: underline;
+    }
+    .action {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 32px;
+      padding: 0 12px;
+      border: 1px solid var(--divider-color);
+      border-radius: 999px;
+      background: none;
+      color: var(--primary-color);
+      font: inherit;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .action:hover:not(:disabled) {
+      background: var(--secondary-background-color);
+    }
+    .action:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
+    }
+    .action:disabled {
+      cursor: progress;
+      opacity: 0.6;
+    }
+    .confirm-yes {
+      border-color: var(--primary-color);
+      background: var(--primary-color);
+      color: var(--text-primary-color, #fff);
+    }
+    .confirm-yes:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--primary-color) 85%, black);
+    }
+    .confirm {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .action-error {
+      flex-basis: 100%;
+      color: var(--error-color);
+      overflow-wrap: anywhere;
     }
     .more {
       padding-top: 8px;

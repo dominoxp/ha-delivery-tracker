@@ -134,6 +134,16 @@ export class DeliveryTrackerCardEditor extends LitElement {
         </label>
       </div>
       ${this.renderFieldChecks(current)}
+      <label class="check">
+        <input
+          name="mark_delivered"
+          type="checkbox"
+          .checked=${current.mark_delivered === true}
+          @change=${(ev: Event) =>
+            this.set("mark_delivered", (ev.target as HTMLInputElement).checked || undefined)}
+        />
+        <span>${this.t("editor.mark_delivered")}</span>
+      </label>
     </div>`;
   }
 

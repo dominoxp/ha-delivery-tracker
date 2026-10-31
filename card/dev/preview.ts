@@ -185,6 +185,10 @@ function entity(entityId: string, state: string, attributes: Record<string, unkn
 const hass: HomeAssistant = {
   locale: { language: "de" },
   config: { time_zone: TZ },
+  callService: (domain, service, data) => {
+    console.info("callService", domain, service, data);
+    return Promise.resolve();
+  },
   states: Object.fromEntries(
     [
       entity("sensor.delivery_tracker_aktive_sendungen", String(shipments.length), {

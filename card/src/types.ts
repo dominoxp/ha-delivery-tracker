@@ -17,6 +17,7 @@ export interface HomeAssistant {
   locale: { language: string };
   /** Server-Konfiguration; `time_zone` ist die HA-Zeitzone (IANA-Name). */
   config?: { time_zone?: string };
+  callService(domain: string, service: string, data?: Record<string, unknown>): Promise<unknown>;
 }
 
 /** Eintrag fuer die Kartenauswahl der Oberflaeche. */

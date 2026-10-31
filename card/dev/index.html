@@ -29,9 +29,11 @@
           <div class="label">
             <strong>Standard</strong><span>alle Felder, eine Sendung aufgeklappt</span>
           </div>
-          <pre>entity: sensor.delivery_tracker_aktive_sendungen</pre>
+          <pre>
+entity: sensor.delivery_tracker_aktive_sendungen
+mark_delivered: true</pre>
           <delivery-tracker-card
-            data-config='{"entity":"sensor.delivery_tracker_aktive_sendungen"}'
+            data-config='{"entity":"sensor.delivery_tracker_aktive_sendungen","mark_delivered":true}'
             data-open="dhl_heute"
           ></delivery-tracker-card>
         </section>
@@ -52,10 +54,11 @@ group_by: destination</pre>
           </div>
           <pre>
 sort_by: status
-max_items: 4</pre>
+max_items: 4
+mark_delivered: true</pre>
           <div class="phone">
             <delivery-tracker-card
-              data-config='{"entity":"sensor.delivery_tracker_aktive_sendungen","sort_by":"status","max_items":4}'
+              data-config='{"entity":"sensor.delivery_tracker_aktive_sendungen","sort_by":"status","max_items":4,"mark_delivered":true}'
               data-open="amazon_locker"
             ></delivery-tracker-card>
           </div>

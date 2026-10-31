@@ -63,10 +63,17 @@ Ressource wieder.
 type: custom:delivery-tracker-card
 entity: sensor.delivery_tracker_aktive_sendungen # ein Sensor der Integration
 title: Pakete # optional, sonst der Name der Entity
+mark_delivered: true # optional: Button „Als zugestellt / abgeholt markieren"
 ```
 
 `entity` muss ein Sensor der Integration sein, also einer mit dem Attribut `shipments`.
 Bei ungültiger Konfiguration zeigt die Karte statt einer leeren Fläche eine Fehlermeldung.
+
+Mit `mark_delivered: true` zeigt die Karte in den aufgeklappten Details jeder noch nicht
+zugestellten Sendung neben „Sendungsverfolgung öffnen" einen Button, der die Sendung nach
+einer Rückfrage über die Action `delivery_tracker.mark_delivered` als zugestellt markiert —
+etwa wenn ein Paketshop die Abholung nicht meldet. Bei abholbereiten Sendungen heißt er
+„Als abgeholt markieren".
 
 Die Karte wird unter `/delivery_tracker/delivery-tracker-card.js` ausgeliefert. Ein von Hand
 angelegter Ressourcen-Eintrag für diese Datei wird übernommen statt verdoppelt.

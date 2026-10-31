@@ -92,6 +92,8 @@ describe("Editor", () => {
     await choose(editor, "max_items", "5");
     await check(editor, "fields", "tracking_number");
     await check(editor, "fields", "progress");
+    root(editor).querySelector<HTMLInputElement>("input[name=mark_delivered]")?.click();
+    await editor.updateComplete;
 
     const handWritten = {
       type: "custom:delivery-tracker-card",
@@ -105,6 +107,7 @@ describe("Editor", () => {
       sort_by: "last_updated",
       max_items: 5,
       fields: ["carrier", "status", "eta", "sender", "description", "destination", "pickup"],
+      mark_delivered: true,
     };
     const last = events.at(-1);
     expect(last).toEqual(validateConfig(handWritten));
@@ -119,7 +122,9 @@ describe("Editor", () => {
       group_by: "status",
       max_items: 3,
       fields: ["status"],
+      mark_delivered: true,
     });
+    root(editor).querySelector<HTMLInputElement>("input[name=mark_delivered]")?.click();
 
     await check(editor, "statuses", "delayed");
     await choose(editor, "group_by", "none");

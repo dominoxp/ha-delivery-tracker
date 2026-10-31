@@ -18,6 +18,7 @@ const EN = {
   "config.invalid_value": "`{key}` contains the unknown value `{value}`. Allowed: {choices}.",
   "config.invalid_choice": "`{key}` must be one of {choices}, got `{value}`.",
   "config.invalid_max_items": "`max_items` must be a whole number greater than 0.",
+  "config.invalid_flag": "`{key}` must be true or false.",
   "error.entity_not_found": "Entity `{entity}` not found.",
   "error.entity_unavailable": "Entity `{entity}` is unavailable.",
   "error.not_a_shipment_sensor":
@@ -55,6 +56,13 @@ const EN = {
   "detail.delivered_at": "Delivered",
   "detail.last_updated": "Last update",
   "detail.open_tracking": "Open tracking page",
+  "action.mark_delivered": "Mark as delivered",
+  "action.mark_picked_up": "Mark as picked up",
+  "action.confirm_delivered": "Really mark this shipment as delivered?",
+  "action.confirm_picked_up": "Really mark this shipment as picked up?",
+  "action.confirm": "Confirm",
+  "action.cancel": "Cancel",
+  "action.failed": "Could not update the shipment: {error}",
   "group.none": "No grouping",
   "group.destination": "By destination",
   "group.status": "By status",
@@ -78,6 +86,7 @@ const EN = {
   "editor.max_items": "Show at most",
   "editor.max_items_placeholder": "all",
   "editor.fields": "Shown fields",
+  "editor.mark_delivered": "Button “Mark as delivered / picked up” in the details",
 } as const;
 
 export type StringKey = keyof typeof EN;
@@ -99,6 +108,7 @@ const DE: Record<StringKey, string> = {
   "config.invalid_value": "`{key}` enthält den unbekannten Wert `{value}`. Erlaubt: {choices}.",
   "config.invalid_choice": "`{key}` muss einer der Werte {choices} sein, erhalten: `{value}`.",
   "config.invalid_max_items": "`max_items` muss eine ganze Zahl größer 0 sein.",
+  "config.invalid_flag": "`{key}` muss true oder false sein.",
   "error.entity_not_found": "Entity `{entity}` nicht gefunden.",
   "error.entity_unavailable": "Entity `{entity}` ist nicht verfügbar.",
   "error.not_a_shipment_sensor":
@@ -136,6 +146,13 @@ const DE: Record<StringKey, string> = {
   "detail.delivered_at": "Zugestellt",
   "detail.last_updated": "Zuletzt aktualisiert",
   "detail.open_tracking": "Sendungsverfolgung öffnen",
+  "action.mark_delivered": "Als zugestellt markieren",
+  "action.mark_picked_up": "Als abgeholt markieren",
+  "action.confirm_delivered": "Sendung wirklich als zugestellt markieren?",
+  "action.confirm_picked_up": "Sendung wirklich als abgeholt markieren?",
+  "action.confirm": "Bestätigen",
+  "action.cancel": "Abbrechen",
+  "action.failed": "Sendung konnte nicht aktualisiert werden: {error}",
   "group.none": "Keine Gruppierung",
   "group.destination": "Nach Zielort",
   "group.status": "Nach Status",
@@ -159,6 +176,7 @@ const DE: Record<StringKey, string> = {
   "editor.max_items": "Höchstens anzeigen",
   "editor.max_items_placeholder": "alle",
   "editor.fields": "Angezeigte Felder",
+  "editor.mark_delivered": "Button „Als zugestellt / abgeholt markieren“ in den Details",
 };
 
 export function localize(

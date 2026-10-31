@@ -199,6 +199,84 @@ describe("Details", () => {
   });
 });
 
+describe("Als zugestellt markieren", () => {
+  async function open(card: DeliveryTrackerCard, name: string): Promise<HTMLElement> {
+    row(card, name).querySelector<HTMLButtonElement>("button.row")?.click();
+    await card.updateComplete;
+    return row(card, name);
+  }
+
+  it("ist ohne Option nicht vorhanden", async () => {
+    const card = await mount({ entity: ENTITY }, hass(shipmentSensor()));
+    const item = await open(card, "Amazon Locker");
+    expect(item.querySelector(".mark-delivered")).toBeNull();
+  });
+
+  it("fragt nach und ruft erst nach Bestaetigung die Action auf", async () => {
+    const hassObj = hass(shipmentSensor());
+    const call = vi.spyOn(hassObj, "callService");
+    const card = await mount({ entity: ENTITY, mark_delivered: true }, hassObj);
+    let item = await open(card, "Amazon Locker");
+    const button = item.querySelector<HTMLButtonElement>(".mark-delivered");
+    expect(text(button)).toBe("Als abgeholt markieren");
+
+    button?.click();
+    await card.updateComplete;
+    item = row(card, "Amazon Locker");
+    expect(text(item.querySelector(".confirm-text"))).toBe(
+      "Sendung wirklich als abgeholt markieren?",
+    );
+    expect(call).not.toHaveBeenCalled();
+
+    item.querySelector<HTMLButtonElement>(".confirm-yes")?.click();
+    await vi.waitFor(() => expect(row(card, "Amazon Locker").querySelector(".confirm")).toBeNull());
+    expect(call).toHaveBeenCalledExactlyOnceWith("delivery_tracker", "mark_delivered", {
+      shipment_id: "amazon_locker",
+    });
+  });
+
+  it("Abbrechen ruft nichts auf", async () => {
+    const hassObj = hass(shipmentSensor());
+    const call = vi.spyOn(hassObj, "callService");
+    const card = await mount({ entity: ENTITY, mark_delivered: true }, hassObj);
+    const item = await open(card, "Fahrradladen");
+    const button = item.querySelector<HTMLButtonElement>(".mark-delivered");
+    expect(text(button)).toBe("Als zugestellt markieren");
+    button?.click();
+    await card.updateComplete;
+    row(card, "Fahrradladen").querySelector<HTMLButtonElement>(".confirm-no")?.click();
+    await card.updateComplete;
+    expect(row(card, "Fahrradladen").querySelector(".confirm")).toBeNull();
+    expect(row(card, "Fahrradladen").querySelector(".mark-delivered")).not.toBeNull();
+    expect(call).not.toHaveBeenCalled();
+  });
+
+  it("zeigt einen Fehler der Action an", async () => {
+    const hassObj = hass(shipmentSensor());
+    vi.spyOn(hassObj, "callService").mockRejectedValue(new Error("Sendung unbekannt"));
+    const card = await mount({ entity: ENTITY, mark_delivered: true }, hassObj);
+    await open(card, "Fahrradladen");
+    row(card, "Fahrradladen").querySelector<HTMLButtonElement>(".mark-delivered")?.click();
+    await card.updateComplete;
+    row(card, "Fahrradladen").querySelector<HTMLButtonElement>(".confirm-yes")?.click();
+    await vi.waitFor(() =>
+      expect(text(row(card, "Fahrradladen").querySelector(".action-error"))).toBe(
+        "Sendung konnte nicht aktualisiert werden: Sendung unbekannt",
+      ),
+    );
+  });
+
+  it("fehlt bei zugestellten Sendungen", async () => {
+    const shipments = [{ id: "fertig", carrier: "dhl", status: "delivered", sender: "Baumarkt" }];
+    const card = await mount(
+      { entity: ENTITY, mark_delivered: true },
+      hass(shipmentSensor(shipments)),
+    );
+    const item = await open(card, "Baumarkt");
+    expect(item.querySelector(".mark-delivered")).toBeNull();
+  });
+});
+
 describe("Keine externen Ressourcen", () => {
   it("Symbole sind eingebettet, nichts wird nachgeladen", async () => {
     const card = await mount({ entity: ENTITY }, hass(shipmentSensor()));
@@ -282,6 +360,7 @@ describe("Konfiguration", () => {
     [{ entity: ENTITY, sort_by: "zufall" }, "`sort_by` muss einer der Werte"],
     [{ entity: ENTITY, max_items: 0 }, "`max_items` muss eine ganze Zahl"],
     [{ entity: ENTITY, max_items: "5" }, "`max_items` muss eine ganze Zahl"],
+    [{ entity: ENTITY, mark_delivered: "ja" }, "`mark_delivered` muss true oder false"],
   ])("lehnt %j mit lesbarer Meldung ab", (config, message) => {
     card.hass = hass();
     expect(() => card.setConfig(config)).toThrow(message);
