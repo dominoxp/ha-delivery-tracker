@@ -6,13 +6,14 @@ Bestellungen, ein Zubringer `LP…`, das Sammelpaket `AP…` und dessen DHL-Pake
 — dazu ein Hermes-Paket mit deutschen Mails.
 """
 
+import time
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from custom_components.delivery_tracker.carriers import CarrierRegistry, discover_plugins
-from custom_components.delivery_tracker.carriers.aliexpress import PLUGIN, items_in
+from custom_components.delivery_tracker.carriers.aliexpress import PLUGIN, items_in, order_numbers
 from custom_components.delivery_tracker.mail import mail_from_text, parse_mail
 from custom_components.delivery_tracker.models import Shipment, ShipmentStatus
 
@@ -272,3 +273,22 @@ def test_artikelblock_titel_ohne_varianten():
         "Testartikel Kabel...",
         "Muster LED-Streifen ...",
     ]
+
+
+def test_offene_links_halten_die_event_loop_nicht_auf():
+    """Unverschlossene Verfolgen-Links laufen nicht je bis ans Mailende."""
+    html = '<a href="/p/tracking/x">' * 8000
+
+    start = time.perf_counter()
+    assert order_numbers(html) == []
+    assert time.perf_counter() - start < 1
+
+
+def test_linktext_endet_am_naechsten_link():
+    """Ein offener Link verschluckt den folgenden nicht."""
+    html = (
+        '<a href="/p/tracking/?tradeOrderId=111111111111">kaputt'
+        f'<a class="b" href="/p/tracking/?tradeOrderId={BESTELLUNG_A}"><span>Track</span></A >'
+    )
+
+    assert order_numbers(html) == [BESTELLUNG_A]
