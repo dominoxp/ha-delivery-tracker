@@ -25,7 +25,7 @@ from .const import (
     STORAGE_SAVE_DELAY,
     STORAGE_VERSION,
 )
-from .merge import has_status_changed, merge_shipments, merge_target, same_items
+from .merge import absorb_target, has_status_changed, merge_shipments, merge_target, same_items
 from .models import Shipment
 
 _LOGGER = logging.getLogger(__name__)
@@ -162,7 +162,21 @@ class ShipmentStore:
                 self._aliases[shipment.id] = target.id
                 self.async_schedule_save()
                 target_id = target.id
-        return shipment if target_id == shipment.id else replace(shipment, id=target_id)
+        if target_id == shipment.id:
+            return shipment
+        target = self._shipments.get(target_id)
+        if target is None:
+            return replace(shipment, id=target_id)
+        # Eine Mail zu einer frueheren Stufe (AliExpress-Zubringer, Sammelpaket)
+        # aendert nichts daran, wer das Paket heute zustellt und unter welcher
+        # Nummer es laeuft.
+        return replace(
+            shipment,
+            id=target_id,
+            carrier=target.carrier,
+            tracking_number=target.tracking_number or shipment.tracking_number,
+            tracking_url=target.tracking_url or shipment.tracking_url,
+        )
 
     @callback
     def async_consolidate(self) -> list[tuple[str, Shipment | None, Shipment]]:
@@ -170,6 +184,12 @@ class ShipmentStore:
 
         Laeuft nach jedem Durchlauf, damit auch Bestaende vor Einfuehrung der
         Regel aufgeraeumt werden. Bei gleichen Artikeln bleibt die aeltere ID.
+
+        Zweite Regel (`absorb_target`): Ein Paket geht in seiner spaeteren
+        Stufe auf — der AliExpress-Zubringer im Sammelpaket, das Sammelpaket im
+        Paket von Hermes. Hier bleibt immer die ID der spaeteren Stufe, denn
+        unter deren Nummer kommen die naechsten Mails.
+
         Gibt je Zusammenlegung (aufgegangene ID, Ziel vorher, Ziel nachher) zurueck.
         """
         merged: list[tuple[str, Shipment | None, Shipment]] = []
@@ -179,13 +199,26 @@ class ShipmentStore:
             for shipment in sorted(
                 self._shipments.values(), key=lambda item: (item.first_seen, item.id), reverse=True
             ):
-                target = merge_target(shipment, self._shipments.values())
-                if target is None:
-                    continue
                 source = shipment
-                if same_items(source, target) and source.first_seen < target.first_seen:
-                    source, target = target, source
+                absorbed = False
+                target = merge_target(shipment, self._shipments.values())
+                if target is not None:
+                    if same_items(source, target) and source.first_seen < target.first_seen:
+                        source, target = target, source
+                elif (target := absorb_target(shipment, self._shipments.values())) is not None:
+                    absorbed = True
+                else:
+                    continue
                 result = merge_shipments(target, replace(source, id=target.id))
+                if absorbed:
+                    # Nummer und Zusteller der spaeteren Stufe bleiben, auch wenn
+                    # die fruehere Stufe die frischere Mail hatte.
+                    result = replace(
+                        result,
+                        carrier=target.carrier,
+                        tracking_number=target.tracking_number,
+                        tracking_url=target.tracking_url or result.tracking_url,
+                    )
                 del self._shipments[source.id]
                 self._shipments[target.id] = result
                 self._aliases[source.id] = target.id

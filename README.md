@@ -10,8 +10,8 @@ ausliest, den Zusteller erkennt und den Sendungsstand in Home Assistant bereitst
 
 - **E-Mail-Quelle:** IMAP mit IDLE-Push (Polling als Fallback), Carrier-Erkennung über
   Absender, Betreff und Trackingnummer.
-- **Zusteller:** DHL/Deutsche Post, Amazon, DPD, GLS, Hermes, UPS sowie ein generischer
-  Fallback — jeder Zusteller ist ein Plugin.
+- **Zusteller:** DHL/Deutsche Post, Amazon, AliExpress, DPD, GLS, Hermes, UPS sowie ein
+  generischer Fallback — jeder Zusteller ist ein Plugin.
 - **API-Quellen:** modular zuschaltbar (17track als generischer Fallback).
 - **In Home Assistant:** feste Zähler-Sensoren mit kompakter Sendungsliste als Attribut,
   eine Action `delivery_tracker.get_shipments` mit vollen Details, eine Kalender-Entity für
@@ -50,6 +50,28 @@ den Einstellungen zwei weitere Punkte:
   fallen Mails auf, die nicht erkannt wurden, etwa eine Zustellmail in neuem Format.
 
 Betreffs und Absender bleiben lokal im Store; die Diagnose-Datei enthält sie nicht.
+
+## AliExpress
+
+AliExpress liefert nicht selbst: Mehrere Bestellungen gehen zuerst als einzelne Pakete ins
+Lager, werden dort zu einem Sammelpaket gebündelt und kommen zuletzt mit Hermes oder DHL.
+Unterwegs bekommt das Paket jedes Mal eine neue Nummer. In der Sendungsliste steht trotzdem
+**eine Zeile je Paket**:
+
+- Nach der Bestellung erscheint sie als *bestellt*, mit Artikel und Bestellnummer.
+- Sobald AliExpress ein Paket meldet, geht die Bestellung darin auf; enthält das Paket
+  mehrere Bestellungen, bleibt es eine Zeile.
+- Meldet AliExpress die Nummer von Hermes oder DHL, steht dieser Zusteller in der Zeile,
+  mit AliExpress als Händler — eigene Mails von Hermes oder DHL landen in derselben Zeile.
+- Der Status kommt aus dem Betreff, deutsch wie englisch: versandbereit, unterwegs, im
+  Zielland, beim lokalen Zusteller, in Zustellung, abholbereit, Zustellproblem, zugestellt.
+- „Wie war Ihr Einkaufserlebnis?" und „auf Bestätigung wird gewartet" ändern nichts: Sie
+  kommen per Zeitplan, auch wenn das Paket noch nicht da ist.
+- Wird eine Bestellung storniert („Your order … is closed"), verschwindet ihre Zeile —
+  solange sie noch keinem Paket zugeordnet ist.
+
+Kommt zu einer Bestellung nie eine Paketmail, bleibt sie auf *versandt*, bis sie nach der
+eingestellten Frist für veraltete Sendungen von selbst verschwindet.
 
 ## Lovelace-Karte
 

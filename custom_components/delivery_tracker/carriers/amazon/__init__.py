@@ -39,7 +39,7 @@ from homeassistant.util import dt as dt_util
 
 from ...dates import parse_eta
 from ...mail import MailMessage
-from ...merge import build_shipment_id
+from ...merge import build_shipment_id, describe_items
 from ...models import Shipment
 from ..base import RulesCarrier
 from ..helpers import MAX_VALUE_LENGTH
@@ -153,18 +153,7 @@ def product_description(mail: MailMessage) -> str | None:
     `None`, wenn sich weder eine Artikelzeile noch ein Produktlink findet — ein
     fehlendes Feld ist besser als ein falsches.
     """
-    return _describe(product_items(mail))
-
-
-def _describe(titles: list[str]) -> str | None:
-    """Mehrere Artikel eines Pakets zu einer Beschreibung zusammenfassen."""
-    if not titles:
-        return None
-    if len(titles) == 1:
-        return titles[0]
-    weitere = len(titles) - 1
-    suffix = f" (+{weitere} weiterer Artikel)" if weitere == 1 else f" (+{weitere} weitere Artikel)"
-    return f"{titles[0][: MAX_VALUE_LENGTH - len(suffix)]}{suffix}"
+    return describe_items(product_items(mail))
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,7 +174,7 @@ class Package:
     @property
     def description(self) -> str | None:
         """Anzeigetext zu den Artikeln dieses Pakets."""
-        return _describe(list(self.items))
+        return describe_items(list(self.items))
 
 
 def _tracking_url(block: str) -> str | None:
@@ -259,7 +248,7 @@ class AmazonCarrier(RulesCarrier):
             items = product_items(mail)
             for shipment in shipments:
                 shipment.items = shipment.items or items
-                shipment.description = shipment.description or _describe(items)
+                shipment.description = shipment.description or describe_items(items)
             return shipments
 
         observed_at = mail.date or dt_util.utcnow()

@@ -7,6 +7,7 @@ testet `test_seventeentrack`.
 
 import asyncio
 from collections.abc import AsyncGenerator, Callable, Mapping
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import Any
 from unittest.mock import patch
@@ -424,6 +425,44 @@ async def test_statuswechsel_steht_im_ergebnis(
     api.results = [api_shipment(ShipmentStatus.DELIVERED, at=start + timedelta(hours=2))]
     await coordinator.async_refresh()
     assert coordinator.data.status_changes == []
+
+
+async def test_stornierte_bestellung_verschwindet_ein_paket_nicht(
+    hass: HomeAssistant, api_sources: list[FakeApiSource]
+) -> None:
+    """Storno entfernt die reine Bestellung; ein Paket mit Nummer bleibt stehen."""
+    coordinator = await setup_entry(hass, make_entry(API_SOURCE))
+    (api,) = api_sources
+    start = dt_util.utcnow()
+
+    def order(number: str, **changes: Any) -> Shipment:
+        return Shipment(
+            id=f"aliexpress_order_aliexpress_{number}",
+            carrier="aliexpress",
+            status=ShipmentStatus.ORDERED,
+            sender="AliExpress",
+            order_number=number,
+            order_numbers=[number],
+            first_seen=start,
+            last_updated=start,
+            **changes,
+        )
+
+    package = replace(
+        api_shipment(ShipmentStatus.IN_TRANSIT, at=start), id="dhl_00340434161094042557"
+    )
+    api.results = [order("1"), package]
+    await coordinator.async_refresh()
+    api.results = [order("1", cancelled=True), order("2", cancelled=True)]
+    await coordinator.async_refresh()
+
+    assert [shipment.id for shipment in coordinator.data.shipments] == [package.id]
+    assert coordinator.data.removed == ["aliexpress_order_aliexpress_1"]
+
+    # Steckt die Bestellung schon im Paket, zeigt ihre ID per Alias dorthin.
+    api.results = [replace(package, cancelled=True)]
+    await coordinator.async_refresh()
+    assert [shipment.id for shipment in coordinator.data.shipments] == [package.id]
 
 
 async def test_retention_raeumt_stille_aktive_sendungen_ab(

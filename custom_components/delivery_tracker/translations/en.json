@@ -76,11 +76,11 @@
             "folder": "Folder",
             "use_idle": "Push via IDLE",
             "poll_interval": "Polling interval",
-            "lookback_days": "Lookback on first retrieval"
+            "lookback_days": "Lookback (days)"
           },
           "data_description": {
             "use_idle": "New emails arrive immediately if the server supports IDLE. Otherwise the folder is checked every polling interval.",
-            "lookback_days": "How many days of unread emails are considered on the first retrieval."
+            "lookback_days": "How many days back emails are considered: unread ones on the first retrieval, all of them when the mailbox is re-read. At most 365."
           }
         }
       },

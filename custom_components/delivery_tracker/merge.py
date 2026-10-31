@@ -18,6 +18,7 @@ from .const import (
     DEFAULT_SOURCE_PRIORITY,
     MAX_EVENTS_PER_SHIPMENT,
     MAX_ITEMS_PER_SHIPMENT,
+    MAX_VALUE_LENGTH,
     SOURCE_PRIORITIES,
 )
 from .models import (
@@ -141,11 +142,27 @@ def _merge_status(
     if current_status is ShipmentStatus.UNKNOWN:
         return incoming_status, incoming.status_text
 
+    if _is_replay(current, incoming):
+        # Dieselbe Beobachtung noch einmal, etwa beim Neu-Einlesen des
+        # Postfachs: Sie ist laengst eingerechnet und darf einen spaeteren
+        # Stand nicht zuruecksetzen — auch nicht als Rueckschritt.
+        return current_status, current.status_text
+
     if incoming_status in REGRESSION_STATUSES:
         # Echte Rueckschritte gewinnen — es sei denn, der aktuelle Stand ist
         # ebenfalls ein Rueckschritt und stammt aus der besseren Quelle.
         if current_status in REGRESSION_STATUSES and not incoming_wins:
             return current_status, current.status_text
+        return incoming_status, incoming.status_text
+
+    if (
+        current_status in REGRESSION_STATUSES
+        and incoming_status.rank >= ShipmentStatus.OUT_FOR_DELIVERY.rank
+        and incoming.last_updated > current.last_updated
+    ):
+        # Nach einem Rueckschritt geht es weiter: Auf „nicht zugestellt" folgt
+        # „liegt in der Filiale", auf „verspaetet" die Zustellung. Ein spaeter
+        # Zwischenstand wie „unterwegs" bleibt dagegen verworfen.
         return incoming_status, incoming.status_text
 
     if incoming_status.rank > current_status.rank:
@@ -155,6 +172,14 @@ def _merge_status(
 
     # Veralteter Status aus einer nachzuegelnden Quelle: verwerfen.
     return current_status, current.status_text
+
+
+def _is_replay(current: Shipment, incoming: Shipment) -> bool:
+    """True, wenn jedes Ereignis von `incoming` schon in `current` steht."""
+    if not incoming.events:
+        return False
+    known = {(event.timestamp, event.status) for event in current.events}
+    return all((event.timestamp, event.status) in known for event in incoming.events)
 
 
 def merge_events(
@@ -192,16 +217,70 @@ def merge_items(
     Informationsmangel, kein Widerspruch. Amazon zaehlt dieselben Artikel in
     Versand- und Abholmail zudem in verschiedener Reihenfolge auf, und die
     Zustellmail nennt gar keinen. Die erste Nennung bestimmt die Reihenfolge.
+
+    Gekuerzte Namen („Testartikel Sens...") gelten als derselbe Artikel wie
+    jede Fassung, die damit beginnt — AliExpress schneidet denselben Titel je
+    Mail an anderer Stelle ab. Die laengere Fassung nimmt den Platz der
+    kuerzeren ein.
     """
-    merged: dict[str, str] = {}
+    merged: list[str] = []
     for item in [*current, *incoming]:
         text = " ".join(item.split())
-        key = text.casefold()
-        if key and key not in merged:
-            merged[key] = text
-        if len(merged) >= limit:
-            break
-    return list(merged.values())
+        if not text:
+            continue
+        index = next((index for index, known in enumerate(merged) if _same_item(known, text)), None)
+        if index is None:
+            if len(merged) >= limit:
+                break
+            merged.append(text)
+        elif len(_stem(text)) > len(_stem(merged[index])):
+            merged[index] = text
+    return merged
+
+
+def describe_items(titles: list[str]) -> str | None:
+    """Mehrere Artikel eines Pakets zu einem Anzeigetext zusammenfassen."""
+    if not titles:
+        return None
+    if len(titles) == 1:
+        return titles[0]
+    weitere = len(titles) - 1
+    suffix = f" (+{weitere} weiterer Artikel)" if weitere == 1 else f" (+{weitere} weitere Artikel)"
+    return f"{titles[0][: MAX_VALUE_LENGTH - len(suffix)]}{suffix}"
+
+
+def _merge_description(
+    current: Shipment, incoming: Shipment, items: list[str], wins: bool
+) -> str | None:
+    """Den Anzeigetext waehlen — und neu bilden, wenn er nur aus den Artikeln stammt.
+
+    Nennt jede Mail einen anderen Artikel, waere sonst nur einer davon zu
+    sehen. Eine Beschreibung, die der Zusteller selbst liefert („Artikel: …"),
+    bleibt dagegen unangetastet.
+    """
+    picked = _pick(current.description, incoming.description, wins)
+    generated = {describe_items(current.items), describe_items(incoming.items)} - {None}
+    if items and picked in generated:
+        return describe_items(items)
+    return picked
+
+
+def _stem(text: str) -> str:
+    """Der Name ohne Auslassungszeichen am Ende, kleingeschrieben."""
+    key = text.casefold()
+    for ellipsis in ("...", "…"):
+        if key.endswith(ellipsis):
+            return key[: -len(ellipsis)].rstrip()
+    return key
+
+
+def _same_item(first: str, second: str) -> bool:
+    """True, wenn beide Namen denselben Artikel meinen — gekuerzt oder nicht."""
+    a, b = first.casefold(), second.casefold()
+    if a == b:
+        return True
+    a_cut, b_cut = _stem(first) != a, _stem(second) != b
+    return (a_cut and b.startswith(_stem(first))) or (b_cut and a.startswith(_stem(second)))
 
 
 def merge_sources(current: list[SourceRecord], incoming: list[SourceRecord]) -> list[SourceRecord]:
@@ -233,6 +312,7 @@ def merge_shipments(current: Shipment, incoming: Shipment) -> Shipment:
 
     wins = _incoming_wins(current, incoming)
     status, status_text = _merge_status(current, incoming, wins)
+    items = merge_items(current.items, incoming.items)
 
     delivered_at = _pick(current.delivered_at, incoming.delivered_at, wins)
     if status is not ShipmentStatus.DELIVERED:
@@ -256,9 +336,10 @@ def merge_shipments(current: Shipment, incoming: Shipment) -> Shipment:
         # Jede Mail nennt nur ihre eigenen Empfaenger; zusammen ergeben sie das Bild.
         recipient_emails=merge_items(current.recipient_emails, incoming.recipient_emails),
         sender=_pick(current.sender, incoming.sender, wins),
-        description=_pick(current.description, incoming.description, wins),
-        items=merge_items(current.items, incoming.items),
+        description=_merge_description(current, incoming, items, wins),
+        items=items,
         order_number=_pick(current.order_number, incoming.order_number, wins),
+        order_numbers=merge_items(current.order_numbers, incoming.order_numbers),
         pickup_location=_pick(current.pickup_location, incoming.pickup_location, wins),
         pickup_code=_pick(current.pickup_code, incoming.pickup_code, wins),
         tracking_url=_pick(current.tracking_url, incoming.tracking_url, wins),
@@ -337,6 +418,82 @@ def merge_target(shipment: Shipment, candidates: Iterable[Shipment]) -> Shipment
         if len(anchors) > 1 or any(_item_set(candidate) != first for candidate in found):
             return None
     return min(found, key=lambda candidate: (candidate.first_seen, candidate.id))
+
+
+def absorb_target(shipment: Shipment, candidates: Iterable[Shipment]) -> Shipment | None:
+    """Das spaetere Paket, in dem `shipment` aufgeht — oder `None`.
+
+    Fuer Marktplaetze, die Bestellungen buendeln und unterwegs neue Nummern
+    vergeben. Bei AliExpress schickt jeder Haendler seine Bestellung als
+    Zubringer (`LP…`) ins Lager, dort entsteht ein Sammelpaket (`AP…`), und
+    das bekommt zuletzt die Nummer von Hermes oder DHL. Keine Mail nennt zwei
+    dieser Nummern; verbunden sind sie nur ueber die Bestellungen darin.
+
+    Kriterium: derselbe Absender, und die Bestellungen von `shipment` stecken
+    alle im Ziel. Ausserdem muss das Ziel eine spaetere Stufe sein:
+    - `shipment` hat noch keine Trackingnummer (reine Bestellung), oder
+    - `shipment` liegt noch beim Marktplatz, und das Ziel enthaelt echt mehr
+      Bestellungen (Zubringer -> Sammelpaket) oder liegt schon bei einem
+      Zusteller (Sammelpaket -> Hermes).
+    Zwei Zubringer derselben Bestellung sind dagegen zwei Pakete und bleiben
+    getrennt, bis beide im Sammelpaket aufgehen. Ein Paket bei Hermes oder
+    DHL geht nie in einem anderen auf.
+
+    Passen mehrere Ziele, gewinnt das, das selbst in keinem anderen aufgeht.
+    Bleiben dann noch mehrere (eine Bestellung in zwei Paketen), geht nur eine
+    reine Bestellung im aeltesten auf — sonst stuende sie ewig als „bestellt"
+    in der Liste. Ein Paket mit Nummer bleibt in dem Fall lieber getrennt.
+    """
+    orders = set(shipment.order_numbers)
+    if not orders or not shipment.sender:
+        return None
+    found = [
+        candidate
+        for candidate in candidates
+        if candidate.id != shipment.id and _supersedes(candidate, shipment)
+    ]
+    if len(found) > 1:
+        found = [
+            candidate
+            for candidate in found
+            if not any(
+                other.id != candidate.id and _supersedes(other, candidate) for other in found
+            )
+        ]
+    if not found or (len(found) > 1 and shipment.tracking_number):
+        return None
+    return min(found, key=lambda candidate: (candidate.first_seen, candidate.id))
+
+
+def _supersedes(candidate: Shipment, shipment: Shipment) -> bool:
+    """True, wenn `candidate` eine spaetere Stufe des Pakets `shipment` ist."""
+    orders = set(shipment.order_numbers)
+    if not orders or candidate.sender != shipment.sender or not candidate.tracking_number:
+        return False
+    if not orders <= set(candidate.order_numbers):
+        return False
+    if not shipment.tracking_number:
+        return True
+    # Ein Paket bei Hermes oder DHL ist die letzte Stufe. Teilt es Bestellungen
+    # mit einem anderen, ist das eine geteilte Lieferung — zwei Pakete.
+    if not _at_marketplace(shipment):
+        return False
+    if len(set(candidate.order_numbers)) > len(orders):
+        return True
+    # Gleiche Bestellungen: Was noch beim Marktplatz liegt, geht in dem auf,
+    # was schon bei Hermes oder DHL ist. Die Reihenfolge der Mails taugt dafuer
+    # nicht — AliExpress meldet sich zum Sammelpaket auch noch, wenn DHL
+    # laengst unterwegs ist.
+    return not _at_marketplace(candidate)
+
+
+def _at_marketplace(shipment: Shipment) -> bool:
+    """True, solange die Sendung beim Haendler selbst gefuehrt wird.
+
+    Marktplatz-Plugins setzen sich selbst als Absender; nach der Uebergabe an
+    einen Zusteller (`CarrierRegistry`) weicht die Carrier-ID davon ab.
+    """
+    return _slug(shipment.sender) == shipment.carrier
 
 
 def same_items(first: Shipment, second: Shipment) -> bool:

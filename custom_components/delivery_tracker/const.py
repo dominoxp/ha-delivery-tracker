@@ -133,6 +133,10 @@ SEVENTEENTRACK_REJECT_RETRY: Final = 86400.0
 # Obergrenze der Event-Historie je Sendung, damit der Store nicht unbegrenzt waechst.
 MAX_EVENTS_PER_SHIPMENT: Final = 50
 
+# Obergrenze fuer aus Mailtext extrahierte Werte — schuetzt vor Regex, die
+# versehentlich den halben Body einfangen.
+MAX_VALUE_LENGTH: Final = 200
+
 # Obergrenze der Artikelliste je Sendung. Ein Paket mit mehr Positionen gibt es,
 # aber fuer die Zuordnung in Step 3.2 reichen die ersten.
 MAX_ITEMS_PER_SHIPMENT: Final = 20

@@ -256,6 +256,14 @@ class Shipment:
     vollstaendige Menge macht die Sendungen in Step 3.2 vergleichbar.
     """
     order_number: str | None = None
+    order_numbers: list[str] = field(default_factory=list)
+    """Alle Bestellungen, die in diesem Paket stecken — `order_number` ist die erste.
+
+    Marktplaetze wie AliExpress packen mehrere Bestellungen in ein Paket und
+    vergeben unterwegs neue Nummern. Die Menge der Bestellungen ist dann das
+    einzige, was Zubringer, Sammelpaket und Paket der letzten Meile verbindet
+    (`merge.absorb_target`).
+    """
     pickup_location: str | None = None
     pickup_code: str | None = None
     tracking_url: str | None = None
@@ -263,6 +271,12 @@ class Shipment:
     sources: list[SourceRecord] = field(default_factory=list)
     first_seen: datetime = field(default_factory=dt_util.utcnow)
     last_updated: datetime = field(default_factory=dt_util.utcnow)
+    cancelled: bool = False
+    """Nur ein Signal der Mailauswertung: Die Bestellung wurde storniert.
+
+    Wird nie gespeichert. Der Coordinator entfernt daraufhin die Sendung der
+    Bestellung, solange sie noch kein Paket mit Trackingnummer ist.
+    """
 
     def __post_init__(self) -> None:
         """Status- und Zeitfelder normalisieren."""
@@ -334,6 +348,7 @@ class Shipment:
             "description": self.description,
             "items": list(self.items),
             "order_number": self.order_number,
+            "order_numbers": list(self.order_numbers),
             "pickup_location": self.pickup_location,
             "pickup_code": self.pickup_code,
             "tracking_url": self.tracking_url,
@@ -364,6 +379,7 @@ class Shipment:
             description=data.get("description"),
             items=_str_list(data.get("items")),
             order_number=data.get("order_number"),
+            order_numbers=_str_list(data.get("order_numbers")),
             pickup_location=data.get("pickup_location"),
             pickup_code=data.get("pickup_code"),
             tracking_url=data.get("tracking_url"),

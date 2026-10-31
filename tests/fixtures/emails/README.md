@@ -118,3 +118,30 @@ erfunden. Die UPS-Nummern haben eine stimmende Pruefziffer.
 | `fremd_beansprucht.eml`     | DHL meldet sich wegen „Ihr Paket", liefert nichts — `generic` uebernimmt  |
 | `rechnung.eml`              | gueltige Pruefziffern hinter Rechnungs-/Kundennummer — darf nichts liefern |
 | `shop_ohne_nummer.eml`      | **echt**: Statusmail eines Shops ohne Trackingnummer — liefert nichts     |
+
+## `aliexpress/` — Bestellung, Zubringer, Sammelpaket, letzte Meile
+
+Abgeleitet aus echten Mails von 2026; Artikel, Varianten, Bestell- und
+Trackingnummern sind erfunden, die DHL-Nummern mit stimmender Pruefziffer. Die
+Mails sind reines HTML ohne Text-Teil und auf den Teil vor der Werbung gekuerzt.
+Sie bilden eine Kette: vier Bestellungen, der Zubringer `LP…`, das Sammelpaket
+`AP…` und dessen DHL-Paket `…185651`; dazu ein Hermes-Paket mit deutschen Mails.
+Die Bestellnummern stehen in den Paketmails nur im Verfolgen-Link.
+
+| Datei                               | Wofuer sie da ist                                              |
+| ----------------------------------- | -------------------------------------------------------------- |
+| `bestellung_bestaetigt.eml`         | Bestellung ohne Trackingnummer, Status bestellt                 |
+| `bestellung_versandt.eml`           | versandt, aber noch ohne Paketnummer                           |
+| `bewertung.eml`                     | Timer-Mail „Wie war Ihr Einkaufserlebnis?" — aendert nichts     |
+| `neuer_lieferstatus.eml`            | Infomail ohne Statusaussage — aendert nichts                    |
+| `order_collected.eml`               | englisch, abgeholt, wieder ohne Paketnummer                    |
+| `package_ready_to_ship.eml`         | Sammelpaket `AP…` mit vier Bestellungen in den Links            |
+| `sammelmail.eml`                    | zwei Pakete, Nummer und Status je Block nur im Link             |
+| `package_left_departure.eml`        | DHL-Nummer — Uebergabe an das DHL-Plugin                        |
+| `package_delivery_issue.eml`        | Zustellproblem; verlinkt zusaetzlich den Zubringer              |
+| `package_ready_for_pickup.eml`      | abholbereit nach dem Zustellproblem                             |
+| `package_delivered.eml`             | zugestellt                                                     |
+| `packstueck_mit_lokalem_kurier.eml` | deutsch, Hermes-Nummer ohne Pruefziffer                         |
+| `paket_zugestellt.eml`              | deutsch, zugestellt                                            |
+| `order_closed.eml`                  | Storno-Signal                                                  |
+| `werbung.eml`                       | Werbung von derselben Domain — erkannt, keine Sendung           |

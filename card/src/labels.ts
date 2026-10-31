@@ -13,6 +13,7 @@ import type { HassEntity } from "./types";
 
 const CARRIER_NAMES: Record<string, string> = {
   dhl: "DHL",
+  aliexpress: "AliExpress",
   amazon: "Amazon",
   dpd: "DPD",
   gls: "GLS",

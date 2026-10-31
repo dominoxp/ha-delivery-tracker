@@ -76,11 +76,11 @@
             "folder": "Ordner",
             "use_idle": "Push per IDLE",
             "poll_interval": "Abfrageintervall",
-            "lookback_days": "Rückblick beim ersten Abruf"
+            "lookback_days": "Rückblick (Tage)"
           },
           "data_description": {
             "use_idle": "Neue Mails kommen sofort an, wenn der Server IDLE unterstützt. Sonst wird im Abfrageintervall gesucht.",
-            "lookback_days": "Wie viele Tage alte, ungelesene Mails beim ersten Abruf berücksichtigt werden."
+            "lookback_days": "Wie viele Tage zurück Mails berücksichtigt werden: beim ersten Abruf die ungelesenen, bei „Postfach neu einlesen“ alle. Höchstens 365."
           }
         }
       },
