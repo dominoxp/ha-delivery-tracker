@@ -43,6 +43,8 @@ export interface DeliveryTrackerCardConfig {
   max_items?: number;
   /** Angezeigte Felder. Fehlt = alle. */
   fields?: Field[];
+  /** Button „als zugestellt/abgeholt markieren" in den Details. Fehlt = aus. */
+  mark_delivered?: boolean;
 }
 
 /** Die Optionen dieser Karte; alles andere (z.B. `grid_options`) gehoert HA. */
@@ -57,6 +59,7 @@ const OWN_KEYS = [
   "sort_by",
   "max_items",
   "fields",
+  "mark_delivered",
 ] as const;
 
 const SENSOR_ENTITY_ID = /^sensor\.[a-z0-9_]+$/;
@@ -95,6 +98,7 @@ export function validateConfig(raw: unknown, language?: string): DeliveryTracker
   const groupBy = choice(config, "group_by", GROUP_BY, language);
   const sortBy = choice(config, "sort_by", SORT_BY, language);
   const maxItems = positiveInt(config, "max_items", language);
+  const markDelivered = flag(config, "mark_delivered", language);
 
   const result: DeliveryTrackerCardConfig = {
     type: typeof config.type === "string" ? config.type : `custom:${CARD_TYPE}`,
@@ -124,6 +128,9 @@ export function validateConfig(raw: unknown, language?: string): DeliveryTracker
   // Alle Felder ausgewaehlt ist dasselbe wie keine Angabe.
   if (fields.length && fields.length < FIELDS.length) {
     result.fields = fields;
+  }
+  if (markDelivered) {
+    result.mark_delivered = true;
   }
 
   const foreign = Object.fromEntries(
@@ -194,6 +201,17 @@ function choice<T extends string>(
     );
   }
   return value as T;
+}
+
+function flag(config: Record<string, unknown>, key: string, language?: string): boolean {
+  const value = config[key];
+  if (value === undefined || value === null) {
+    return false;
+  }
+  if (typeof value !== "boolean") {
+    throw new Error(localize(language, "config.invalid_flag", { key }));
+  }
+  return value;
 }
 
 function positiveInt(

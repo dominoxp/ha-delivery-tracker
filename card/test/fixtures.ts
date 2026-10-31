@@ -101,6 +101,7 @@ export function hass(...entities: HassEntity[]): HomeAssistant {
     states: Object.fromEntries(entities.map((e) => [e.entity_id, e])),
     locale: { language: "de" },
     config: { time_zone: TIME_ZONE },
+    callService: () => Promise.resolve(),
   };
 }
 
