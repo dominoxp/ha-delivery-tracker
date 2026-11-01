@@ -510,3 +510,22 @@ async def test_ereigniszeit_ohne_utc_feld(hass: HomeAssistant, api: FakeSeventee
     assert shipment.events[0].timestamp == datetime(2026, 7, 29, 4, 12, tzinfo=UTC)
     assert shipment.last_updated == shipment.events[0].timestamp
     assert shipment.first_seen <= dt_util.utcnow()
+
+
+async def test_abgewaehlter_zusteller_wird_weder_registriert_noch_abgefragt(
+    hass: HomeAssistant, api: FakeSeventeenTrack
+) -> None:
+    """Die API-Quelle laesst abgewaehlte Zusteller ganz in Ruhe."""
+    api.track(UPS_NUMBER, 100002, "ups_out_for_delivery")
+    context = SourceContext(
+        known_shipments=lambda: [mail_shipment()], registry=await async_get_registry(hass)
+    )
+    source = create_source(
+        hass, {"api_key": VALID_API_KEY, "excluded_carriers": ["dhl", "ups"]}, context
+    )
+    await source.async_setup()
+
+    assert await source.async_fetch() == []
+    assert "register" not in api.paths()
+    assert "gettrackinfo" not in api.paths()
+    assert "stoptrack" not in api.paths()

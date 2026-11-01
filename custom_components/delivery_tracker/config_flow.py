@@ -71,6 +71,7 @@ from .const import (
     CONF_DESTINATION_RULES,
     CONF_DISABLED_CARRIERS,
     CONF_ENABLED_CARRIERS,
+    CONF_EXCLUDED_CARRIERS,
     CONF_FOLDER,
     CONF_GENERIC_FALLBACK,
     CONF_LOOKBACK_DAYS,
@@ -84,6 +85,7 @@ from .const import (
     CONF_SERVER,
     CONF_SOURCE_TYPE,
     CONF_STALE_DAYS,
+    CONF_TRACKED_CARRIERS,
     CONF_USE_IDLE,
     CONF_USERNAME,
     CONF_VERIFY_SSL,
@@ -761,6 +763,41 @@ async def async_validate_api_source(hass: HomeAssistant, data: Mapping[str, Any]
         return ERROR_UNKNOWN
 
 
+async def _async_carrier_filter(
+    hass: HomeAssistant, excluded: Iterable[str]
+) -> tuple[set[str], dict[Any, Any]]:
+    """Alle Zusteller und das Feld fuer ihre Auswahl; vorausgewaehlt ist das Nicht-Ausgeschlossene.
+
+    Gespeichert wird die Gegenmenge (`CONF_EXCLUDED_CARRIERS`): Ein neues
+    Carrier-Plugin wird damit nach einem Update automatisch mit abgefragt.
+    """
+    registry = await async_get_registry(hass)
+    carrier_ids = {plugin.carrier_id for plugin in registry.plugins}
+    field = {
+        vol.Required(
+            CONF_TRACKED_CARRIERS, default=sorted(carrier_ids - set(excluded))
+        ): SelectSelector(
+            SelectSelectorConfig(
+                options=[
+                    SelectOptionDict(value=plugin.carrier_id, label=plugin.name)
+                    for plugin in registry.plugins
+                ],
+                multiple=True,
+                mode=SelectSelectorMode.LIST,
+            )
+        )
+    }
+    return carrier_ids, field
+
+
+def _excluded_carriers(
+    carrier_ids: set[str], tracked: Iterable[str], previous: Iterable[str] = ()
+) -> list[str]:
+    """Abgewaehlte Zusteller; Ausschluesse gerade nicht geladener Plugins bleiben erhalten."""
+    previous = set(previous)
+    return sorted((carrier_ids - set(tracked)) | (previous - carrier_ids))
+
+
 def _credential_schema(source_type: str, *, reconfigure: bool) -> dict[Any, Any]:
     """Die Felder fuer die Zugangsdaten; beim Bearbeiten ist das Geheimnis optional."""
     secret = api_source_secret(source_type)
@@ -827,6 +864,7 @@ class ApiSourceSubentryFlow(ConfigSubentryFlow):
         """Zugangsdaten abfragen, pruefen und die Quelle anlegen."""
         source_type = self._source_type
         secret = api_source_secret(source_type)
+        carrier_ids, carrier_field = await _async_carrier_filter(self.hass, ())
         errors: dict[str, str] = {}
         if user_input is not None:
             data: dict[str, Any] = {CONF_SOURCE_TYPE: source_type}
@@ -834,6 +872,9 @@ class ApiSourceSubentryFlow(ConfigSubentryFlow):
                 data[CONF_USERNAME] = str(user_input[CONF_USERNAME]).strip()
             data[secret] = _clean_secret(secret, user_input[secret])
             data[CONF_SCAN_INTERVAL] = int(user_input[CONF_SCAN_INTERVAL])
+            data[CONF_EXCLUDED_CARRIERS] = _excluded_carriers(
+                carrier_ids, user_input.get(CONF_TRACKED_CARRIERS, carrier_ids)
+            )
             error = await async_validate_api_source(self.hass, data)
             if error is None:
                 return self.async_create_entry(
@@ -849,6 +890,7 @@ class ApiSourceSubentryFlow(ConfigSubentryFlow):
                 vol.Required(
                     CONF_SCAN_INTERVAL, default=DEFAULT_API_SCAN_INTERVAL
                 ): _seconds_selector(MIN_API_SCAN_INTERVAL, MAX_POLL_INTERVAL),
+                **carrier_field,
             }
         )
         return self.async_show_form(
@@ -866,12 +908,17 @@ class ApiSourceSubentryFlow(ConfigSubentryFlow):
         subentry = self._get_reconfigure_subentry()
         source_type = str(subentry.data.get(CONF_SOURCE_TYPE, ""))
         secret = api_source_secret(source_type)
+        previous = subentry.data.get(CONF_EXCLUDED_CARRIERS, [])
+        carrier_ids, carrier_field = await _async_carrier_filter(self.hass, previous)
         errors: dict[str, str] = {}
         if user_input is not None:
             data = {
                 **subentry.data,
                 secret: _clean_secret(secret, user_input.get(secret)) or subentry.data[secret],
                 CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL]),
+                CONF_EXCLUDED_CARRIERS: _excluded_carriers(
+                    carrier_ids, user_input.get(CONF_TRACKED_CARRIERS, carrier_ids), previous
+                ),
             }
             if CONF_USERNAME in user_input:
                 data[CONF_USERNAME] = str(user_input[CONF_USERNAME]).strip()
@@ -886,6 +933,7 @@ class ApiSourceSubentryFlow(ConfigSubentryFlow):
                 vol.Required(CONF_SCAN_INTERVAL): _seconds_selector(
                     MIN_API_SCAN_INTERVAL, MAX_POLL_INTERVAL
                 ),
+                **carrier_field,
             }
         )
         suggested = {

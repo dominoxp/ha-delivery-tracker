@@ -168,7 +168,11 @@
           "data": {
             "username": "E-Mail-Adresse",
             "password": "Passwort",
-            "scan_interval": "Abfrageintervall"
+            "scan_interval": "Abfrageintervall",
+            "tracked_carriers": "Über 17TRACK verfolgen"
+          },
+          "data_description": {
+            "tracked_carriers": "Sendungen abgewählter Zusteller werden bei 17TRACK weder eingetragen noch abgefragt."
           }
         },
         "api_key": {
@@ -176,7 +180,11 @@
           "description": "API-Schlüssel aus dem Entwicklerkonto unter api.17track.net. Jede neu angemeldete Trackingnummer verbraucht eine Einheit des gekauften Kontingents.",
           "data": {
             "api_key": "API-Schlüssel",
-            "scan_interval": "Abfrageintervall"
+            "scan_interval": "Abfrageintervall",
+            "tracked_carriers": "Über 17TRACK verfolgen"
+          },
+          "data_description": {
+            "tracked_carriers": "Sendungen abgewählter Zusteller werden bei 17TRACK weder eingetragen noch abgefragt."
           }
         },
         "reconfigure": {
@@ -186,7 +194,11 @@
             "api_key": "API-Schlüssel",
             "username": "E-Mail-Adresse",
             "password": "Passwort",
-            "scan_interval": "Abfrageintervall"
+            "scan_interval": "Abfrageintervall",
+            "tracked_carriers": "Über 17TRACK verfolgen"
+          },
+          "data_description": {
+            "tracked_carriers": "Sendungen abgewählter Zusteller werden bei 17TRACK weder eingetragen noch abgefragt."
           }
         }
       },

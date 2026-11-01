@@ -426,6 +426,7 @@ async def test_flow_legt_konto_an(
         "username": ACCOUNT_USERNAME,
         "password": ACCOUNT_PASSWORD,
         "scan_interval": 1800,
+        "excluded_carriers": [],
     }
 
     result = await start_subentry_flow(hass, hub, SUBENTRY_API_SOURCE)
@@ -444,7 +445,12 @@ async def test_flow_konto_bearbeiten(
 
     result = await start_subentry_flow(hass, entry, SUBENTRY_API_SOURCE, subentry.subentry_id)
     assert result["step_id"] == "reconfigure"
-    assert set(result["data_schema"].schema) == {"username", "password", "scan_interval"}
+    assert set(result["data_schema"].schema) == {
+        "username",
+        "password",
+        "scan_interval",
+        "tracked_carriers",
+    }
     result = await configure_subentry(
         hass, result, {"username": ACCOUNT_USERNAME, "scan_interval": 7200}
     )
@@ -545,3 +551,77 @@ async def test_falsches_passwort_fuehrt_zu_repair_und_reauth(
 def test_fabrik_ist_eingetragen() -> None:
     """Die Quelle traegt sich beim Import selbst als Fabrik fuer ihren Typ ein."""
     assert API_SOURCE_FACTORIES[SOURCE_SEVENTEENTRACK_ACCOUNT] is create_source
+
+
+# ----------------------------------------------------------------------
+# Zusteller-Filter
+# ----------------------------------------------------------------------
+
+
+async def test_abgewaehlter_zusteller_wird_nie_angefasst(
+    hass: HomeAssistant, account: FakeSeventeenTrackAccount
+) -> None:
+    """Abgewaehlt: nicht eintragen, nicht uebernehmen, nicht archivieren — die anderen schon."""
+    account.add(UPS_NUMBER, carrier=100002, event=last_event("2026-07-29 08:15", "Unterwegs"))
+    account.add("00340434161094042557", state=40, event=last_event("2026-07-30 11:05", "Da"))
+    context = SourceContext(
+        known_shipments=lambda: [mail_shipment("JJD000000000000000001", carrier="dpd")],
+        registry=await async_get_registry(hass),
+    )
+    source = create_source(
+        hass,
+        {
+            "username": ACCOUNT_USERNAME,
+            "password": ACCOUNT_PASSWORD,
+            "excluded_carriers": ["ups", "dhl", "dpd"],
+        },
+        context,
+    )
+    await source.async_setup()
+
+    assert await source.async_fetch() == []
+    assert "AddTrackNo" not in account.methods()
+    assert "SetTrackArchived" not in account.methods()
+    assert source.diagnostics()["excluded_carriers"] == ["dhl", "dpd", "ups"]
+
+
+async def test_flow_zusteller_auswaehlen_und_spaeter_aendern(
+    hass: HomeAssistant, hub: ConfigEntry
+) -> None:
+    """Gespeichert wird, was abgewaehlt ist; beim Bearbeiten ist die Auswahl vorbelegt."""
+    result = await start_subentry_flow(hass, hub, SUBENTRY_API_SOURCE)
+    result = await configure_subentry(hass, result, {"source_type": "seventeentrack_account"})
+    carriers = result["data_schema"].schema["tracked_carriers"].config["options"]
+    all_ids = {option["value"] for option in carriers}
+    assert {"amazon", "dpd", "generic"} <= all_ids
+
+    result = await configure_subentry(
+        hass,
+        result,
+        {
+            "username": ACCOUNT_USERNAME,
+            "password": ACCOUNT_PASSWORD,
+            "scan_interval": 1800,
+            "tracked_carriers": sorted(all_ids - {"amazon"}),
+        },
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    (subentry,) = subentries_of(hub, SUBENTRY_API_SOURCE)
+    assert subentry.data["excluded_carriers"] == ["amazon"]
+
+    result = await start_subentry_flow(hass, hub, SUBENTRY_API_SOURCE, subentry.subentry_id)
+    (key,) = [key for key in result["data_schema"].schema if key == "tracked_carriers"]
+    assert "amazon" not in key.default()
+    assert "dpd" in key.default()
+
+    result = await configure_subentry(
+        hass,
+        result,
+        {
+            "username": ACCOUNT_USERNAME,
+            "scan_interval": 1800,
+            "tracked_carriers": sorted(all_ids - {"amazon", "hermes"}),
+        },
+    )
+    assert result["reason"] == "reconfigure_successful"
+    assert hub.subentries[subentry.subentry_id].data["excluded_carriers"] == ["amazon", "hermes"]

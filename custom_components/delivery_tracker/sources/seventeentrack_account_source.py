@@ -24,7 +24,7 @@ fragt sie nur nicht mehr ab.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any, Final
 
@@ -33,6 +33,7 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.util import dt as dt_util
 
 from ..const import (
+    CONF_EXCLUDED_CARRIERS,
     CONF_PASSWORD,
     CONF_USERNAME,
     ISSUE_API_LOGIN_INVALID,
@@ -86,10 +87,16 @@ class SeventeenTrackAccountSource(SeventeenTrackSourceBase):
         mapping: SeventeenTrackMapping | None = None,
         source_id: str = SOURCE_SEVENTEENTRACK_ACCOUNT,
         priority: int | None = None,
+        excluded_carriers: Iterable[str] = (),
     ) -> None:
         """Quelle anlegen; die Zuordnung wird ohne Vorgabe in `async_setup` geladen."""
         super().__init__(
-            context, hass=hass, mapping=mapping, source_id=source_id, priority=priority
+            context,
+            hass=hass,
+            mapping=mapping,
+            source_id=source_id,
+            priority=priority,
+            excluded_carriers=excluded_carriers,
         )
         self._client = client
         self._stats = {"added": 0, "rejected": 0, "archived": 0, "fetched": 0}
@@ -129,6 +136,12 @@ class SeventeenTrackAccountSource(SeventeenTrackSourceBase):
             if number := normalize_tracking_number(package.number):
                 remote.setdefault(number, package)
         self._tracked = len(remote)
+        # Abgewaehlte Zusteller: weder archivieren noch uebernehmen — als gaebe es sie nicht.
+        remote = {
+            number: package
+            for number, package in remote.items()
+            if self._remote_allowed(number, package.carrier, known)
+        }
 
         # Lokal abgeschlossen (etwa per Zustellmail): nicht mehr abfragen lassen.
         closed = [number for number in remote if (s := known.get(number)) and s.is_closed]
@@ -138,7 +151,9 @@ class SeventeenTrackAccountSource(SeventeenTrackSourceBase):
             [
                 shipment
                 for number, shipment in known.items()
-                if shipment.is_active and number not in remote
+                if shipment.is_active
+                and number not in remote
+                and self._carrier_allowed(shipment.carrier)
             ],
             now,
         )
@@ -257,7 +272,12 @@ def create_source(
         str(data[CONF_USERNAME]),
         str(data[CONF_PASSWORD]),
     )
-    return SeventeenTrackAccountSource(client, context, hass=hass)
+    return SeventeenTrackAccountSource(
+        client,
+        context,
+        hass=hass,
+        excluded_carriers=data.get(CONF_EXCLUDED_CARRIERS, ()),
+    )
 
 
 API_SOURCE_FACTORIES[SOURCE_SEVENTEENTRACK_ACCOUNT] = create_source

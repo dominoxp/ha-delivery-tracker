@@ -548,6 +548,7 @@ async def test_api_source_schluessel_wird_geprueft(
         "source_type": "seventeentrack",
         "api_key": VALID_API_KEY,
         "scan_interval": 1800,
+        "excluded_carriers": [],
     }
 
     # Der zweite Eintrag desselben Typs scheitert schon an der Typauswahl.

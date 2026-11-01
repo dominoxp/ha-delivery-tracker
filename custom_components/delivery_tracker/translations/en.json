@@ -168,7 +168,11 @@
           "data": {
             "username": "Email address",
             "password": "Password",
-            "scan_interval": "Polling interval"
+            "scan_interval": "Polling interval",
+            "tracked_carriers": "Track via 17TRACK"
+          },
+          "data_description": {
+            "tracked_carriers": "Shipments of deselected carriers are never added to or queried from 17TRACK."
           }
         },
         "api_key": {
@@ -176,7 +180,11 @@
           "description": "API key from the developer account at api.17track.net. Every newly registered tracking number uses one unit of the purchased quota.",
           "data": {
             "api_key": "API key",
-            "scan_interval": "Polling interval"
+            "scan_interval": "Polling interval",
+            "tracked_carriers": "Track via 17TRACK"
+          },
+          "data_description": {
+            "tracked_carriers": "Shipments of deselected carriers are never added to or queried from 17TRACK."
           }
         },
         "reconfigure": {
@@ -186,7 +194,11 @@
             "api_key": "API key",
             "username": "Email address",
             "password": "Password",
-            "scan_interval": "Polling interval"
+            "scan_interval": "Polling interval",
+            "tracked_carriers": "Track via 17TRACK"
+          },
+          "data_description": {
+            "tracked_carriers": "Shipments of deselected carriers are never added to or queried from 17TRACK."
           }
         }
       },

@@ -62,6 +62,10 @@ CONF_DESTINATION_RULES: Final = (
 # Felder eines `api_source`-Subentrys.
 CONF_SOURCE_TYPE: Final = "source_type"
 CONF_API_KEY: Final = "api_key"
+CONF_TRACKED_CARRIERS: Final = "tracked_carriers"
+"""Nur Formularfeld: Gespeichert wird die Gegenmenge `CONF_EXCLUDED_CARRIERS`."""
+CONF_EXCLUDED_CARRIERS: Final = "excluded_carriers"
+"""Zusteller, deren Sendungen eine Tracking-Quelle nie anfasst."""
 CONF_SCAN_INTERVAL: Final = "scan_interval"
 
 # Options des Hub-Entrys (globale Einstellungen).
