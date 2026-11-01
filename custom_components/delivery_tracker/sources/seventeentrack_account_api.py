@@ -195,10 +195,14 @@ class SeventeenTrackAccountClient:
         return self._logged_in
 
     async def async_close(self) -> None:
-        """Die eigene Session schliessen. Mehrfach aufrufbar."""
+        """Die eigene Session freigeben. Mehrfach aufrufbar.
+
+        Sessions aus `async_create_clientsession` teilen sich den Connector mit
+        HA und duerfen nicht geschlossen werden — `detach` gibt nur sie selbst frei.
+        """
         self._logged_in = False
         if not self._session.closed:
-            await self._session.close()
+            self._session.detach()
 
     # ------------------------------------------------------------------
     # Endpunkte

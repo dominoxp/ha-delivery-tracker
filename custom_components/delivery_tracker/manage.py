@@ -26,6 +26,7 @@ from .const import DESTINATION_UNKNOWN, DESTINATION_UNKNOWN_NAME, DOMAIN
 from .mail import strip_tags
 from .models import Shipment
 from .pipeline import MailLogEntry, MailOutcome
+from .sources.base import TrackingReport, TrackingState
 from .store import Expiry, ExpiryRule
 
 # Zeichen, die in einer Markdown-Zeile oder Tabelle etwas bedeuten.
@@ -65,6 +66,10 @@ class Texts:
     def outcome(self, value: MailOutcome) -> str:
         """Anzeigename eines Mail-Ergebnisses."""
         return self.strings.get(f"mail_outcome.{value.value}", value.value)
+
+    def tracking_state(self, value: TrackingState) -> str:
+        """Anzeigename eines Abgleich-Zustands."""
+        return self.strings.get(f"tracking_state.{value.value}", value.value)
 
 
 async def async_load_texts(hass: HomeAssistant) -> Texts:
@@ -348,3 +353,63 @@ def _outcome_cell(texts: Texts, entry: MailLogEntry, carriers: Mapping[str, str]
         parts.append(carrier_name(carriers, entry.carrier))
     parts.extend(texts.status(status) for _, status in entry.shipments)
     return " · ".join(parts)
+
+
+_TRACKING_ICONS: Final = {
+    TrackingState.TRACKING: "✅",
+    TrackingState.NOT_FOUND: "🔍",
+    TrackingState.ADDED: "🆕",
+    TrackingState.PENDING: "⏳",
+    TrackingState.REJECTED: "❌",
+    TrackingState.INVALID: "⚠️",
+    TrackingState.EXCLUDED: "🚫",
+    TrackingState.FINISHED: "📦",
+}
+
+
+def tracking_log(
+    texts: Texts,
+    sections: Iterable[tuple[str, list[TrackingReport] | None]],
+    *,
+    carriers: Mapping[str, str],
+) -> str:
+    """Der Abgleich je Tracking-Quelle als Tabelle, eine Zeile je Nummer."""
+    parts: list[str] = []
+    for title, reports in sections:
+        parts.append(f"### {md(title)}")
+        if reports is None:
+            parts.append(texts.get("tracking_not_run"))
+            continue
+        if not reports:
+            parts.append(texts.get("tracking_empty"))
+            continue
+        checked = max(report.checked_at for report in reports)
+        parts.append(texts.get("tracking_checked", time=format_dt(texts, checked)))
+        rows = [
+            _header(texts, "col_number", "col_carrier", "col_tracking", "col_status", "col_note")
+        ]
+        for report in reports:
+            rows.append(
+                f"| {md(report.number)} "
+                f"| {carrier_name(carriers, report.carrier) if report.carrier else EMPTY} "
+                f"| {_TRACKING_ICONS[report.state]} {texts.tracking_state(report.state)} "
+                f"| {texts.status(report.status) if report.status else EMPTY} "
+                f"| {_tracking_note(texts, report)} |"
+            )
+        parts.append("\n".join(rows))
+    return "\n\n".join(parts)
+
+
+def _tracking_note(texts: Texts, report: TrackingReport) -> str:
+    notes: list[str] = []
+    if report.shipment_id is None and report.state is not TrackingState.EXCLUDED:
+        notes.append(texts.get("tracking_no_shipment"))
+    if report.last_event is not None:
+        notes.append(texts.get("tracking_last_event", time=format_dt(texts, report.last_event)))
+    if report.detail in ("quota", "limit"):
+        notes.append(texts.get(f"tracking_pending_{report.detail}"))
+    elif report.detail:
+        notes.append(texts.get("tracking_code", code=md(report.detail)))
+    if report.retry_at is not None:
+        notes.append(texts.get("tracking_retry", time=format_dt(texts, report.retry_at)))
+    return " · ".join(notes) or EMPTY

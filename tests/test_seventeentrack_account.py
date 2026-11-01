@@ -13,11 +13,13 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import async_capture_events
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.delivery_tracker.carriers import async_get_registry
 from custom_components.delivery_tracker.const import (
     DOMAIN,
+    EVENT_TRACKING_REJECTED,
     ISSUE_API_LOGIN_INVALID,
     SOURCE_IMAP,
     SOURCE_SEVENTEENTRACK_ACCOUNT,
@@ -26,7 +28,7 @@ from custom_components.delivery_tracker.const import (
 from custom_components.delivery_tracker.coordinator import SourceState
 from custom_components.delivery_tracker.diagnostics import async_get_config_entry_diagnostics
 from custom_components.delivery_tracker.merge import merge_shipments
-from custom_components.delivery_tracker.models import Shipment, ShipmentStatus
+from custom_components.delivery_tracker.models import Shipment, ShipmentStatus, SourceRecord
 from custom_components.delivery_tracker.sources import (
     API_SOURCE_FACTORIES,
     SeventeenTrackAccountSource,
@@ -34,6 +36,7 @@ from custom_components.delivery_tracker.sources import (
     SourceContext,
     SourceError,
     SourceRateLimitError,
+    TrackingState,
 )
 from custom_components.delivery_tracker.sources import (
     seventeentrack_account_api as account_api,
@@ -625,3 +628,156 @@ async def test_flow_zusteller_auswaehlen_und_spaeter_aendern(
     )
     assert result["reason"] == "reconfigure_successful"
     assert hub.subentries[subentry.subentry_id].data["excluded_carriers"] == ["amazon", "hermes"]
+
+
+# ----------------------------------------------------------------------
+# Abgleich, Ablehnungs-Event und von Hand angelegte Nummern
+# ----------------------------------------------------------------------
+
+
+def manual_shipment(number: str, carrier: str = "generic") -> Shipment:
+    """Eine Sendung, wie sie die Action `add_shipment` anlegt."""
+    return Shipment(
+        id=f"{carrier}_{number.lower()}",
+        carrier=carrier,
+        tracking_number=number,
+        sources=[SourceRecord(source_id="manual", fetched_at=dt_util.utcnow())],
+    )
+
+
+async def test_abgleich_zeigt_auch_was_nichts_liefert(
+    hass: HomeAssistant, account: FakeSeventeenTrackAccount
+) -> None:
+    """Nicht gefunden, eingetragen, ungueltig, abgewaehlt: alles steht im Abgleich."""
+    account.add("01234567890123", state=0)
+    known = [
+        mail_shipment(),
+        mail_shipment("00340434161094042558"),
+        mail_shipment(UPS_NUMBER, carrier="ups"),
+    ]
+    context = SourceContext(known_shipments=lambda: known, registry=await async_get_registry(hass))
+    source = create_source(
+        hass,
+        {"username": ACCOUNT_USERNAME, "password": ACCOUNT_PASSWORD, "excluded_carriers": ["ups"]},
+        context,
+    )
+    await source.async_setup()
+    assert source.tracking_report() is None
+
+    await source.async_fetch()
+    report = {item.number: item for item in source.tracking_report() or []}
+
+    assert report["01234567890123"].state is TrackingState.NOT_FOUND
+    assert report["01234567890123"].shipment_id is None
+    assert report[DHL_NUMBER].state is TrackingState.ADDED
+    assert report[DHL_NUMBER].shipment_id == "dhl_" + DHL_NUMBER
+    assert report["00340434161094042558"].state is TrackingState.INVALID
+    assert report[UPS_NUMBER].state is TrackingState.EXCLUDED
+
+    account.update(DHL_NUMBER, FPackageState=10, FLastEvent=last_event("2026-07-29 06:12", "x"))
+    await source.async_fetch()
+    report = {item.number: item for item in source.tracking_report() or []}
+    assert report[DHL_NUMBER].state is TrackingState.TRACKING
+    assert report[DHL_NUMBER].status is ShipmentStatus.IN_TRANSIT
+    assert report[DHL_NUMBER].last_event == local_time("2026-07-29 06:12")
+
+
+async def test_ablehnung_meldet_event_und_steht_im_abgleich(
+    hass: HomeAssistant, account: FakeSeventeenTrackAccount
+) -> None:
+    """Ein Event je Ablehnung, mit Nummer und Grund; im Abgleich mit naechstem Versuch."""
+    events = async_capture_events(hass, EVENT_TRACKING_REJECTED)
+    account.invalid.add(DHL_NUMBER)
+    source = await make_source(hass, [mail_shipment()])
+
+    await source.async_fetch()
+    await hass.async_block_till_done()
+
+    (event,) = events
+    assert event.data["tracking_number"] == DHL_NUMBER
+    assert event.data["source"] == SOURCE_SEVENTEENTRACK_ACCOUNT
+    assert event.data["carrier"] == "dhl"
+    assert event.data["reason"] == "-5"
+    (report,) = source.tracking_report() or []
+    assert report.state is TrackingState.REJECTED
+    assert report.retry_at is not None
+
+    # Waehrend der Sperrfrist kein weiteres Event, aber weiter im Abgleich.
+    await source.async_fetch()
+    await hass.async_block_till_done()
+    assert len(events) == 1
+    assert (source.tracking_report() or [])[0].state is TrackingState.REJECTED
+
+
+async def test_von_hand_angelegte_nummer_wird_ohne_pruefziffer_eingetragen(
+    hass: HomeAssistant, account: FakeSeventeenTrackAccount
+) -> None:
+    """Aus einer Mail wuerde diese Nummer nie eingetragen, von Hand schon."""
+    source = await make_source(hass, [manual_shipment("AB12345678XY")])
+
+    await source.async_fetch()
+
+    assert account.params("AddTrackNo") == [{"TrackNos": ["AB12345678XY"]}]
+
+
+async def test_limit_je_durchlauf_steht_im_abgleich(
+    hass: HomeAssistant, account: FakeSeventeenTrackAccount
+) -> None:
+    """Was ueber die Obergrenze hinausgeht, wartet — sichtbar."""
+    known = [mail_shipment(f"JJD{index:018d}", carrier="dhl") for index in range(12)]
+    source = await make_source(hass, known)
+
+    await source.async_fetch()
+
+    states = [item.state for item in source.tracking_report() or []]
+    assert states.count(TrackingState.ADDED) == 10
+    assert states.count(TrackingState.PENDING) == 2
+
+
+async def test_schliessen_gibt_die_session_frei(
+    hass: HomeAssistant, account: FakeSeventeenTrackAccount, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Die Session von HA wird freigegeben, nicht geschlossen — sonst warnt HA."""
+    source = await make_source(hass)
+    await source.async_close()
+    await source.async_close()
+
+    assert "closes the Home Assistant aiohttp session" not in caplog.text
+
+
+async def test_abgleich_seite_im_optionsmenue(
+    hass: HomeAssistant, account: FakeSeventeenTrackAccount
+) -> None:
+    """Konfigurieren → 17TRACK-Abgleich: Tabelle je Quelle, auf Wunsch sofort abgleichen."""
+    account.add("01234567890123", state=0)
+    entry = make_entry(ACCOUNT_SOURCE)
+    coordinator = await setup_entry(hass, entry)
+    await coordinator.async_refresh()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "tracking"}
+    )
+    assert result["step_id"] == "tracking"
+    table = result["description_placeholders"]["tracking"]
+    assert "### 17TRACK-Konto" in table
+    assert "01234567890123" in table
+    assert "| DPD | 🔍 nothing found yet |" in table
+
+    lists = len(account.params("GetTrackInfoList"))
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"refresh": True})
+    assert result["step_id"] == "tracking"
+    assert len(account.params("GetTrackInfoList")) == lists + 1
+
+
+async def test_abgleich_seite_ohne_quelle(hass: HomeAssistant) -> None:
+    """Ohne Tracking-Quelle gibt es nichts abzugleichen."""
+    entry = make_entry()
+    await setup_entry(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "tracking"}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "no_tracking_sources"

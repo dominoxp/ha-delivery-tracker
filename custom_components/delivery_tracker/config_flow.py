@@ -117,6 +117,7 @@ from .manage import (
     overview,
     shipment_details,
     shipment_label,
+    tracking_log,
 )
 from .models import Destination, Shipment
 from .sources.imap_source import (
@@ -165,7 +166,7 @@ ABORT_REAUTH_SUCCESSFUL = "reauth_successful"
 ABORT_REAUTH_UNKNOWN_SOURCE = "reauth_unknown_source"
 
 # Sendungsverwaltung im Options-Flow.
-OPTIONS_MENU = ("settings", "shipments", "mails")
+OPTIONS_MENU = ("settings", "shipments", "mails", "tracking")
 FIELD_SHIPMENTS = "shipments"
 FIELD_ACTION = "action"
 FIELD_CONFIRM = "confirm"
@@ -187,6 +188,8 @@ ERROR_CONFIRM_REQUIRED = "confirm_required"
 ABORT_NOT_LOADED = "not_loaded"
 ABORT_NO_SHIPMENTS = "no_shipments"
 ABORT_NO_MAILBOXES = "no_mailboxes"
+ABORT_NO_TRACKING_SOURCES = "no_tracking_sources"
+FIELD_REFRESH = "refresh"
 ABORT_SHIPMENT_GONE = "shipment_gone"
 ABORT_SHIPMENTS_REMOVED = "shipments_removed"
 ABORT_SHIPMENTS_DELIVERED = "shipments_delivered"
@@ -1419,6 +1422,38 @@ class DeliveryTrackerOptionsFlow(OptionsFlow):
                     only_problems=mail_filter == FILTER_PROBLEMS,
                     carriers=carriers,
                 ),
+            },
+        )
+
+    async def async_step_tracking(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Der Abgleich der Tracking-Quellen: was 17TRACK mit jeder Nummer gemacht hat."""
+        if (runtime := self._runtime()) is None:
+            return self.async_abort(reason=ABORT_NOT_LOADED)
+        handles = [
+            handle
+            for handle in runtime.sources.values()
+            if handle.kind == SUBENTRY_API_SOURCE and handle.source is not None
+        ]
+        if not handles:
+            return self.async_abort(reason=ABORT_NO_TRACKING_SOURCES)
+
+        if user_input is not None and user_input.get(FIELD_REFRESH):
+            await runtime.coordinator.async_refresh_sources([handle.key for handle in handles])
+        texts = await self._async_texts()
+        carriers, _ = self._names(runtime)
+        sections = [
+            (handle.title, handle.source.tracking_report())
+            for handle in handles
+            if handle.source is not None
+        ]
+        schema = vol.Schema({vol.Optional(FIELD_REFRESH, default=False): BooleanSelector()})
+        return self.async_show_form(
+            step_id="tracking",
+            data_schema=schema,
+            description_placeholders={
+                "tracking": tracking_log(texts, sections, carriers=carriers),
             },
         )
 

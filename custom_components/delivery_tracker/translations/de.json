@@ -222,7 +222,8 @@
         "menu_options": {
           "settings": "Einstellungen",
           "shipments": "Sendungen ansehen und verwalten",
-          "mails": "Letzte Mails prüfen"
+          "mails": "Letzte Mails prüfen",
+          "tracking": "17TRACK-Abgleich prüfen"
         }
       },
       "settings": {
@@ -311,6 +312,16 @@
         "data_description": {
           "rescan": "Liest alle Mails des eingestellten Zeitraums erneut, auch bereits gelesene. Sendungen werden dabei nur zusammengeführt, nicht verdoppelt. Danach den Dialog erneut absenden, um den Stand zu sehen."
         }
+      },
+      "tracking": {
+        "title": "17TRACK-Abgleich",
+        "description": "Was jede Tracking-Quelle beim letzten Durchlauf mit jeder Nummer gemacht hat – auch mit Nummern, zu denen 17TRACK noch nichts gefunden hat.\n\n{tracking}",
+        "data": {
+          "refresh": "Jetzt abgleichen"
+        },
+        "data_description": {
+          "refresh": "Fragt 17TRACK sofort ab, ohne das Intervall abzuwarten. Neu eingetragene Nummern haben frühestens beim nächsten Abgleich einen Stand."
+        }
       }
     },
     "error": {
@@ -329,7 +340,8 @@
       "shipment_gone": "Die Sendung gibt es nicht mehr.",
       "shipments_removed": "{count} Sendungen gelöscht.",
       "shipments_delivered": "{count} Sendungen als zugestellt markiert.",
-      "destination_saved": "Zielort „{name}“ gespeichert, {count} Sendungen zugeordnet."
+      "destination_saved": "Zielort „{name}“ gespeichert, {count} Sendungen zugeordnet.",
+      "no_tracking_sources": "Es ist keine Tracking-Quelle eingerichtet."
     }
   },
   "entity": {
@@ -478,7 +490,32 @@
         "rescan_started": "Neu-Einlesen gestartet: {mailboxes}. Je nach Postfach dauert das einige Sekunden bis Minuten.",
         "rescan_running": "Das Postfach wird gerade neu eingelesen …",
         "format_date": "%d.%m.%Y",
-        "format_datetime": "%d.%m.%Y %H:%M"
+        "format_datetime": "%d.%m.%Y %H:%M",
+        "tracking_not_run": "Noch kein Abgleich – die Quelle wurde seit dem Start noch nicht abgefragt.",
+        "tracking_empty": "Keine Nummern.",
+        "tracking_checked": "Stand: {time}",
+        "col_number": "Nummer",
+        "col_carrier": "Zusteller",
+        "col_tracking": "17TRACK",
+        "col_note": "Hinweis",
+        "tracking_no_shipment": "nur bei 17TRACK",
+        "tracking_last_event": "letztes Ereignis {time}",
+        "tracking_pending_quota": "Kontingent aufgebraucht",
+        "tracking_pending_limit": "höchstens 10 je Durchlauf",
+        "tracking_code": "Code {code}",
+        "tracking_retry": "nächster Versuch {time}"
+      }
+    },
+    "tracking_state": {
+      "options": {
+        "tracking": "wird verfolgt",
+        "not_found": "noch nichts gefunden",
+        "added": "gerade eingetragen",
+        "pending": "wartet aufs Eintragen",
+        "rejected": "abgelehnt",
+        "invalid": "nicht eingetragen (Nummer ungültig)",
+        "excluded": "Zusteller abgewählt",
+        "finished": "abgeschlossen"
       }
     }
   },

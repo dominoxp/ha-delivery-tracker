@@ -222,7 +222,8 @@
         "menu_options": {
           "settings": "Settings",
           "shipments": "View and manage shipments",
-          "mails": "Check recent mails"
+          "mails": "Check recent mails",
+          "tracking": "Check 17TRACK sync"
         }
       },
       "settings": {
@@ -311,6 +312,16 @@
         "data_description": {
           "rescan": "Reads all mails of the configured period again, including already read ones. Shipments are only merged, not duplicated. Submit the dialog again afterwards to see the result."
         }
+      },
+      "tracking": {
+        "title": "17TRACK sync",
+        "description": "What each tracking source did with each number during its last run – including numbers 17TRACK has not found anything for yet.\n\n{tracking}",
+        "data": {
+          "refresh": "Sync now"
+        },
+        "data_description": {
+          "refresh": "Queries 17TRACK immediately instead of waiting for the interval. Newly added numbers get a status at the next sync at the earliest."
+        }
       }
     },
     "error": {
@@ -329,7 +340,8 @@
       "shipment_gone": "The shipment no longer exists.",
       "shipments_removed": "{count} shipments deleted.",
       "shipments_delivered": "{count} shipments marked as delivered.",
-      "destination_saved": "Destination “{name}” saved, {count} shipments assigned."
+      "destination_saved": "Destination “{name}” saved, {count} shipments assigned.",
+      "no_tracking_sources": "No tracking source is set up."
     }
   },
   "entity": {
@@ -478,7 +490,32 @@
         "rescan_started": "Re-reading started: {mailboxes}. Depending on the mailbox this takes a few seconds to minutes.",
         "rescan_running": "The mailbox is being re-read …",
         "format_date": "%Y-%m-%d",
-        "format_datetime": "%Y-%m-%d %H:%M"
+        "format_datetime": "%Y-%m-%d %H:%M",
+        "tracking_not_run": "No sync yet – the source has not been queried since startup.",
+        "tracking_empty": "No numbers.",
+        "tracking_checked": "As of {time}",
+        "col_number": "Number",
+        "col_carrier": "Carrier",
+        "col_tracking": "17TRACK",
+        "col_note": "Note",
+        "tracking_no_shipment": "only at 17TRACK",
+        "tracking_last_event": "last event {time}",
+        "tracking_pending_quota": "quota exhausted",
+        "tracking_pending_limit": "at most 10 per run",
+        "tracking_code": "code {code}",
+        "tracking_retry": "next attempt {time}"
+      }
+    },
+    "tracking_state": {
+      "options": {
+        "tracking": "tracked",
+        "not_found": "nothing found yet",
+        "added": "just added",
+        "pending": "waiting to be added",
+        "rejected": "rejected",
+        "invalid": "not added (invalid number)",
+        "excluded": "carrier deselected",
+        "finished": "finished"
       }
     }
   },

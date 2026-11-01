@@ -59,9 +59,11 @@ from ..const import (
     CONF_API_KEY,
     CONF_EXCLUDED_CARRIERS,
     DOMAIN,
+    EVENT_TRACKING_REJECTED,
     SEVENTEENTRACK_BACKOFF_MAX,
     SEVENTEENTRACK_BACKOFF_START,
     SEVENTEENTRACK_REJECT_RETRY,
+    SOURCE_MANUAL,
     SOURCE_SEVENTEENTRACK,
 )
 from ..merge import build_shipment_id
@@ -72,7 +74,9 @@ from .base import (
     SourceContext,
     SourceError,
     SourceRateLimitError,
+    TrackingReport,
     TrackingSource,
+    TrackingState,
 )
 from .seventeentrack_api import (
     CODE_ALREADY_REGISTERED,
@@ -257,6 +261,10 @@ class SeventeenTrackSourceBase(TrackingSource, ABC):
         self._rejected: dict[str, datetime] = {}
         """Abgelehnte Nummern mit dem Zeitpunkt der Ablehnung."""
         self._tracked = 0
+        self._report: dict[str, TrackingReport] | None = None
+        """Abgleich des letzten vollstaendigen Durchlaufs; `None` vor dem ersten."""
+        self._next_report: dict[str, TrackingReport] = {}
+        """Abgleich des laufenden Durchlaufs; ersetzt `_report` erst am Ende."""
 
     @property
     def mapping(self) -> SeventeenTrackMapping:
@@ -290,6 +298,7 @@ class SeventeenTrackSourceBase(TrackingSource, ABC):
                 f"Drosselung, naechster Versuch ab {self._backoff_until.isoformat()}"
             )
         try:
+            self._next_report = {}
             shipments = await self._async_sync(now)
         except SourceRateLimitError as err:
             retry_after = getattr(err, "retry_after", None) or 0
@@ -302,7 +311,14 @@ class SeventeenTrackSourceBase(TrackingSource, ABC):
             raise
         self._backoff = 0.0
         self._backoff_until = None
+        self._report = self._next_report
         return shipments
+
+    def tracking_report(self) -> list[TrackingReport] | None:
+        """Was der letzte Durchlauf mit jeder Nummer gemacht hat, nach Nummer sortiert."""
+        if self._report is None:
+            return None
+        return sorted(self._report.values(), key=lambda report: report.number)
 
     @abstractmethod
     async def _async_sync(self, now: datetime) -> list[Shipment]:
@@ -331,6 +347,105 @@ class SeventeenTrackSourceBase(TrackingSource, ABC):
         carrier, _, _ = self._identity(number, code, known.get(number))
         return self._carrier_allowed(carrier)
 
+    # ------------------------------------------------------------------
+    # Abgleich festhalten
+    # ------------------------------------------------------------------
+
+    def _note(
+        self,
+        number: str,
+        state: TrackingState,
+        now: datetime,
+        *,
+        shipment: Shipment | None = None,
+        **fields: Any,
+    ) -> None:
+        """Eine Zeile des Abgleichs; Carrier und Sendung kommen aus der Sendung in HA."""
+        if shipment is not None:
+            fields.setdefault("carrier", shipment.carrier)
+            fields.setdefault("shipment_id", shipment.id)
+        self._next_report[number] = TrackingReport(
+            number=number, state=state, checked_at=now, **fields
+        )
+
+    def _note_remote(
+        self,
+        number: str,
+        code: Any,
+        known: Mapping[str, Shipment],
+        state: TrackingState,
+        now: datetime,
+        shipment: Shipment | None = None,
+        **fields: Any,
+    ) -> None:
+        """Eine Nummer beim Dienst; ohne Sendung zaehlt der Zusteller, den er erkannt hat."""
+        local = known.get(number)
+        carrier, _, _ = self._identity(number, code, local)
+        target = shipment or local
+        if shipment is not None:
+            fields.setdefault("status", shipment.status)
+        self._note(
+            number,
+            state,
+            now,
+            carrier=carrier,
+            shipment_id=target.id if target is not None else None,
+            **fields,
+        )
+
+    def _reject(self, number: str, shipment: Shipment | None, now: datetime, detail: str) -> None:
+        """Eine Ablehnung sperren, festhalten und als Event melden."""
+        self._rejected[number] = now
+        self._note(
+            number,
+            TrackingState.REJECTED,
+            now,
+            shipment=shipment,
+            detail=detail,
+            retry_at=now + timedelta(seconds=SEVENTEENTRACK_REJECT_RETRY),
+        )
+        if self._hass is not None:
+            self._hass.bus.async_fire(
+                EVENT_TRACKING_REJECTED,
+                {
+                    "source": self.source_id,
+                    "tracking_number": number,
+                    "carrier": shipment.carrier if shipment is not None else None,
+                    "shipment_id": shipment.id if shipment is not None else None,
+                    "reason": detail,
+                },
+            )
+
+    def _registration_candidates(
+        self, known: Mapping[str, Shipment], remote: Iterable[str], now: datetime
+    ) -> list[tuple[str, Shipment]]:
+        """Aktive Sendungen, die beim Dienst fehlen und eingetragen werden duerfen.
+
+        Was nicht darf — Zusteller abgewaehlt, Nummer ungueltig, Ablehnung noch
+        gesperrt —, landet mit Grund im Abgleich.
+        """
+        self._prune_rejected(now)
+        present = set(remote)
+        eligible: list[tuple[str, Shipment]] = []
+        for number, shipment in known.items():
+            if not shipment.is_active or number in present:
+                continue
+            if not self._carrier_allowed(shipment.carrier):
+                self._note(number, TrackingState.EXCLUDED, now, shipment=shipment)
+            elif not self._is_registrable(shipment, number):
+                self._note(number, TrackingState.INVALID, now, shipment=shipment)
+            elif (rejected_at := self._rejected.get(number)) is not None:
+                self._note(
+                    number,
+                    TrackingState.REJECTED,
+                    now,
+                    shipment=shipment,
+                    retry_at=rejected_at + timedelta(seconds=SEVENTEENTRACK_REJECT_RETRY),
+                )
+            else:
+                eligible.append((number, shipment))
+        return eligible
+
     def _prune_rejected(self, now: datetime) -> None:
         """Ablehnungen vergessen, deren Sperrfrist abgelaufen ist."""
         retry_before = now - timedelta(seconds=SEVENTEENTRACK_REJECT_RETRY)
@@ -342,10 +457,13 @@ class SeventeenTrackSourceBase(TrackingSource, ABC):
         """Besteht die Nummer die Pruefung ihres Zustellers?
 
         Der generische Fallback faengt bewusst weit — von ihm wird nur
-        eingetragen, was eine stimmende Pruefziffer hat.
+        eingetragen, was eine stimmende Pruefziffer hat. Von Hand angelegte
+        Nummern sind gewollt und werden ohne Pruefziffer eingetragen.
         """
         if not _MIN_NUMBER_LENGTH <= len(number) <= _MAX_NUMBER_LENGTH or not number.isalnum():
             return False
+        if SOURCE_MANUAL in shipment.source_ids:
+            return True
         registry = self._context.registry
         if registry is None:
             return True
@@ -464,6 +582,9 @@ class SeventeenTrackSource(SeventeenTrackSourceBase):
         }
         self._tracked = len(remote)
         # Abgewaehlte Zusteller: weder abfragen noch abmelden — als gaebe es sie nicht.
+        for number, carrier in remote.items():
+            if not self._remote_allowed(number, carrier, known):
+                self._note_remote(number, carrier, known, TrackingState.EXCLUDED, now)
         remote = {
             number: carrier
             for number, carrier in remote.items()
@@ -473,19 +594,12 @@ class SeventeenTrackSource(SeventeenTrackSourceBase):
         # Lokal abgeschlossen (etwa per Zustellmail): nicht mehr abfragen, abmelden.
         closed = [number for number in remote if (s := known.get(number)) and s.is_closed]
         await self._async_stop(closed, remote)
+        for number in closed:
+            self._note_remote(number, remote[number], known, TrackingState.FINISHED, now)
 
         # Frisch registrierte Nummern stehen erst im naechsten Durchlauf in `remote`
         # und werden damit auch erst dann abgefragt.
-        await self._async_register(
-            [
-                shipment
-                for number, shipment in known.items()
-                if shipment.is_active
-                and number not in remote
-                and self._carrier_allowed(shipment.carrier)
-            ],
-            now,
-        )
+        await self._async_register(self._registration_candidates(known, remote, now), now)
 
         query = [
             TrackItem(number, carrier) for number, carrier in remote.items() if number not in closed
@@ -494,11 +608,33 @@ class SeventeenTrackSource(SeventeenTrackSourceBase):
             return []
 
         result = await self._client.async_get_track_info(query)
-        shipments = [
-            shipment
-            for item in result.accepted
-            if (shipment := self._build_shipment(item, known, now)) is not None
-        ]
+        shipments: list[Shipment] = []
+        for item in result.accepted:
+            number = normalize_tracking_number(str(item.get("number", "")))
+            shipment = self._build_shipment(item, known, now)
+            if shipment is None:
+                self._note_remote(number, item.get("carrier"), known, TrackingState.NOT_FOUND, now)
+                continue
+            shipments.append(shipment)
+            self._note_remote(
+                number,
+                item.get("carrier"),
+                known,
+                TrackingState.FINISHED if shipment.is_closed else TrackingState.TRACKING,
+                now,
+                shipment,
+                last_event=shipment.last_updated,
+            )
+        for rejection in result.rejected:
+            number = normalize_tracking_number(rejection.number)
+            self._note_remote(
+                number,
+                remote.get(number),
+                known,
+                TrackingState.NOT_FOUND,
+                now,
+                detail=str(rejection.code),
+            )
         self._stats["fetched"] += len(shipments)
 
         # Zugestellt, zurueck oder endgueltig gescheitert: kein Grund, weiter zu fragen.
@@ -521,15 +657,11 @@ class SeventeenTrackSource(SeventeenTrackSourceBase):
         for rejection in result.rejected:
             _LOGGER.debug("17TRACK: Abmelden abgelehnt (%s)", rejection.code)
 
-    async def _async_register(self, candidates: list[Shipment], now: datetime) -> None:
+    async def _async_register(self, candidates: list[tuple[str, Shipment]], now: datetime) -> None:
         """Neue Nummern registrieren — nur gepruefte, und nur bei vorhandenem Kontingent."""
-        self._prune_rejected(now)
         items = [
             TrackItem(number, self.mapping.carrier_code(shipment.carrier))
-            for shipment in candidates
-            if (number := normalize_tracking_number(shipment.tracking_number or ""))
-            and number not in self._rejected
-            and self._is_registrable(shipment, number)
+            for number, shipment in candidates
         ]
         if not items:
             # Niemand wartet — ein leeres Kontingent ist dann kein Problem.
@@ -539,6 +671,7 @@ class SeventeenTrackSource(SeventeenTrackSourceBase):
         await self._async_update_quota(now)
         if self._quota is not None and self._quota.exhausted:
             self._set_quota_exhausted(len(items))
+            self._note_pending(candidates, now)
             return
 
         try:
@@ -546,23 +679,42 @@ class SeventeenTrackSource(SeventeenTrackSourceBase):
         except SeventeenTrackQuotaError:
             # Die ganze Anfrage abgelehnt: Die bekannten Nummern laufen trotzdem weiter.
             self._set_quota_exhausted(len(items))
+            self._note_pending(candidates, now)
             return
-        self._handle_registration(result, now)
+        self._handle_registration(result, now, dict(candidates))
 
-    def _handle_registration(self, result: BatchResult, now: datetime) -> None:
+    def _note_pending(self, candidates: list[tuple[str, Shipment]], now: datetime) -> None:
+        """Nummern, die auf Kontingent warten."""
+        for number, shipment in candidates:
+            self._note(number, TrackingState.PENDING, now, shipment=shipment, detail="quota")
+
+    def _handle_registration(
+        self, result: BatchResult, now: datetime, candidates: Mapping[str, Shipment]
+    ) -> None:
         """Ablehnungen sperren, ein leeres Kontingent melden, das Kontingent nachfuehren."""
         self._stats["registered"] += len(result.accepted)
+        for item in result.accepted:
+            number = normalize_tracking_number(str(item.get("number", "")))
+            self._note(number, TrackingState.ADDED, now, shipment=candidates.get(number))
 
         pending = 0
         for rejection in result.rejected:
+            number = normalize_tracking_number(rejection.number)
             if rejection.code == CODE_ALREADY_REGISTERED:
                 # Liegt gestoppt im Konto — erneut registrieren ginge nur ueber Kontingent.
                 _LOGGER.debug("17TRACK: Nummer ist bereits registriert")
             elif rejection.code == CODE_QUOTA_EXHAUSTED:
                 # Kein Urteil ueber die Nummer: Sie kommt dran, sobald Kontingent da ist.
                 pending += 1
+                self._note(
+                    number,
+                    TrackingState.PENDING,
+                    now,
+                    shipment=candidates.get(number),
+                    detail="quota",
+                )
                 continue
-            self._rejected[normalize_tracking_number(rejection.number)] = now
+            self._reject(number, candidates.get(number), now, str(rejection.code))
             self._stats["rejected"] += 1
             _LOGGER.debug("17TRACK: Registrierung abgelehnt (%s)", rejection.code)
 

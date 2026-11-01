@@ -42,7 +42,7 @@ from ..const import (
 )
 from ..models import Shipment, ShipmentEvent, ShipmentStatus, SourceRecord
 from ..tracking import normalize_tracking_number
-from .base import API_SOURCE_FACTORIES, SourceContext
+from .base import API_SOURCE_FACTORIES, SourceContext, TrackingState
 from .seventeentrack_account_api import (
     CODE_OK,
     AccountPackage,
@@ -137,6 +137,9 @@ class SeventeenTrackAccountSource(SeventeenTrackSourceBase):
                 remote.setdefault(number, package)
         self._tracked = len(remote)
         # Abgewaehlte Zusteller: weder archivieren noch uebernehmen — als gaebe es sie nicht.
+        for number, package in remote.items():
+            if not self._remote_allowed(number, package.carrier, known):
+                self._note_remote(number, package.carrier, known, TrackingState.EXCLUDED, now)
         remote = {
             number: package
             for number, package in remote.items()
@@ -146,24 +149,29 @@ class SeventeenTrackAccountSource(SeventeenTrackSourceBase):
         # Lokal abgeschlossen (etwa per Zustellmail): nicht mehr abfragen lassen.
         closed = [number for number in remote if (s := known.get(number)) and s.is_closed]
         await self._async_archive(closed, remote)
+        for number in closed:
+            self._note_remote(number, remote[number].carrier, known, TrackingState.FINISHED, now)
 
-        await self._async_add(
-            [
-                shipment
-                for number, shipment in known.items()
-                if shipment.is_active
-                and number not in remote
-                and self._carrier_allowed(shipment.carrier)
-            ],
-            now,
-        )
+        await self._async_add(self._registration_candidates(known, remote, now), now)
 
-        shipments = [
-            shipment
-            for number, package in remote.items()
-            if number not in closed
-            and (shipment := self._build_shipment(number, package, known, now)) is not None
-        ]
+        shipments: list[Shipment] = []
+        for number, package in remote.items():
+            if number in closed:
+                continue
+            shipment = self._build_shipment(number, package, known, now)
+            if shipment is None:
+                self._note_remote(number, package.carrier, known, TrackingState.NOT_FOUND, now)
+                continue
+            shipments.append(shipment)
+            self._note_remote(
+                number,
+                package.carrier,
+                known,
+                TrackingState.FINISHED if shipment.is_closed else TrackingState.TRACKING,
+                now,
+                shipment,
+                last_event=shipment.events[-1].timestamp if shipment.events else None,
+            )
         self._stats["fetched"] += len(shipments)
 
         # Zugestellt, zurueck oder endgueltig gescheitert: archivieren wie in der App.
@@ -191,23 +199,18 @@ class SeventeenTrackAccountSource(SeventeenTrackSourceBase):
         else:
             _LOGGER.debug("17TRACK-Konto: Archivieren abgelehnt")
 
-    async def _async_add(self, candidates: list[Shipment], now: datetime) -> None:
+    async def _async_add(self, candidates: list[tuple[str, Shipment]], now: datetime) -> None:
         """Neue, gepruefte Nummern eintragen — eine Anfrage je Nummer, gedeckelt."""
-        self._prune_rejected(now)
-        numbers = [
-            number
-            for shipment in candidates
-            if (number := normalize_tracking_number(shipment.tracking_number or ""))
-            and number not in self._rejected
-            and self._is_registrable(shipment, number)
-        ]
-        for number in numbers[:SEVENTEENTRACK_ACCOUNT_MAX_ADD]:
+        for number, shipment in candidates[SEVENTEENTRACK_ACCOUNT_MAX_ADD:]:
+            self._note(number, TrackingState.PENDING, now, shipment=shipment, detail="limit")
+        for number, shipment in candidates[:SEVENTEENTRACK_ACCOUNT_MAX_ADD]:
             code = await self._client.async_add(number)
             if code == CODE_OK:
                 self._stats["added"] += 1
+                self._note(number, TrackingState.ADDED, now, shipment=shipment)
                 continue
             # Ungueltige Nummer oder volles Konto — erst nach der Sperrfrist erneut versuchen.
-            self._rejected[number] = now
+            self._reject(number, shipment, now, str(code))
             self._stats["rejected"] += 1
             _LOGGER.debug("17TRACK-Konto: Eintragen abgelehnt (%s)", code)
 

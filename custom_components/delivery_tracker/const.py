@@ -215,3 +215,5 @@ ISSUE_API_QUOTA_EXHAUSTED: Final = "api_quota_exhausted"
 EVENT_SHIPMENT_ADDED: Final = f"{DOMAIN}_shipment_added"
 EVENT_SHIPMENT_UPDATED: Final = f"{DOMAIN}_shipment_updated"
 EVENT_SHIPMENT_DELIVERED: Final = f"{DOMAIN}_shipment_delivered"
+# Eine Tracking-Quelle (17TRACK) lehnt eine Nummer ab.
+EVENT_TRACKING_REJECTED: Final = f"{DOMAIN}_tracking_rejected"

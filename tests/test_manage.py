@@ -155,12 +155,12 @@ async def configure(hass: HomeAssistant, result: Any, user_input: dict[str, Any]
 async def test_menue_bietet_einstellungen_sendungen_und_mails(
     hass: HomeAssistant, hass_storage: dict[str, Any]
 ) -> None:
-    """Das Options-Menue fuehrt zu allen drei Bereichen."""
+    """Das Options-Menue fuehrt zu allen vier Bereichen."""
     entry = await setup_with(hass, hass_storage, [])
     result = await hass.config_entries.options.async_init(entry.entry_id)
 
     assert result["type"] is FlowResultType.MENU
-    assert list(result["menu_options"]) == ["settings", "shipments", "mails"]
+    assert list(result["menu_options"]) == ["settings", "shipments", "mails", "tracking"]
 
 
 async def test_liste_zeigt_alter_und_verfall_aelteste_zuerst(

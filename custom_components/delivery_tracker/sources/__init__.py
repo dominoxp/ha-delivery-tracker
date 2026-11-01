@@ -17,7 +17,9 @@ from .base import (
     SourcePermanentError,
     SourceQuotaError,
     SourceRateLimitError,
+    TrackingReport,
     TrackingSource,
+    TrackingState,
 )
 from .imap_source import (
     ImapAuthError,
@@ -63,5 +65,7 @@ __all__ = [
     "SourcePermanentError",
     "SourceQuotaError",
     "SourceRateLimitError",
+    "TrackingReport",
     "TrackingSource",
+    "TrackingState",
 ]

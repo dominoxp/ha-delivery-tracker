@@ -70,6 +70,46 @@ liegen. Zugestellte Sendungen werden im Konto archiviert bzw. bei der API abgeme
 API kostet jede neu angemeldete Nummer eine Einheit Kontingent; das Konto kennt kein
 Kontingent. Für den privaten Haushalt ist das Konto die naheliegende Wahl.
 
+Unter **Konfigurieren → 17TRACK-Abgleich prüfen** steht je Quelle, was der letzte Durchlauf mit
+jeder Nummer gemacht hat: wird verfolgt, noch nichts gefunden, gerade eingetragen, wartet,
+abgelehnt (mit nächstem Versuch), Nummer ungültig oder Zusteller abgewählt. Lehnt 17TRACK eine
+Nummer ab, feuert das Event `delivery_tracker_tracking_rejected` (`source`, `tracking_number`,
+`carrier`, `shipment_id`, `reason`).
+
+Nummern ohne Mail legt die Action `delivery_tracker.add_shipment` an; sie landen immer bei
+17TRACK, auch ohne gültige Prüfziffer. Den Zusteller dabei immer angeben: Viele Nummernformate
+passen auf mehrere Zusteller. Fürs Dashboard reicht ein Skript mit Feldern — ein Tippen auf
+seine Kachel öffnet das Formular:
+
+```yaml
+sendung_hinzufuegen:
+  alias: Sendung hinzufügen
+  icon: mdi:package-variant-plus
+  fields:
+    tracking_number:
+      name: Trackingnummer
+      required: true
+      selector:
+        text:
+    carrier:
+      name: Zusteller
+      required: true
+      selector:
+        select:
+          options: [dhl, dpd, gls, hermes, ups, amazon, generic]
+    description:
+      name: Beschreibung
+      selector:
+        text:
+  sequence:
+    - action: delivery_tracker.add_shipment
+      data:
+        tracking_number: "{{ tracking_number | trim }}"
+        carrier: "{{ carrier }}"
+        description: "{{ description | default('', true) }}"
+    - action: delivery_tracker.refresh
+```
+
 ## AliExpress
 
 AliExpress liefert nicht selbst: Mehrere Bestellungen gehen zuerst als einzelne Pakete ins

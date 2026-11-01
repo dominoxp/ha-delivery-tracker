@@ -10,12 +10,14 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import datetime
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant
 
 from ..merge import source_priority
-from ..models import Shipment
+from ..models import Shipment, ShipmentStatus
 
 if TYPE_CHECKING:
     from ..carriers import CarrierRegistry
@@ -43,6 +45,45 @@ class SourceQuotaError(SourcePermanentError):
 
 class SourceRateLimitError(SourceError):
     """Der Dienst drosselt die Anfragen — voruebergehend, die Quelle wartet ab."""
+
+
+class TrackingState(StrEnum):
+    """Was eine Tracking-Quelle zuletzt mit einer Nummer gemacht hat."""
+
+    TRACKING = "tracking"
+    """Der Dienst liefert einen Stand."""
+    NOT_FOUND = "not_found"
+    """Beim Dienst vorhanden, aber er hat beim Zusteller noch nichts gefunden."""
+    ADDED = "added"
+    """In diesem Durchlauf eingetragen; der Stand kommt fruehestens im naechsten."""
+    PENDING = "pending"
+    """Wartet aufs Eintragen (Obergrenze je Durchlauf oder leeres Kontingent)."""
+    REJECTED = "rejected"
+    """Vom Dienst abgelehnt; `retry_at` nennt den naechsten Versuch."""
+    INVALID = "invalid"
+    """Nicht eingetragen, weil die Nummer die Pruefung ihres Zustellers nicht besteht."""
+    EXCLUDED = "excluded"
+    """Zusteller fuer diese Quelle abgewaehlt."""
+    FINISHED = "finished"
+    """Abgeschlossen und beim Dienst abgemeldet bzw. archiviert."""
+
+
+@dataclass(frozen=True, slots=True)
+class TrackingReport:
+    """Eine Zeile des Abgleichs einer Tracking-Quelle."""
+
+    number: str
+    state: TrackingState
+    checked_at: datetime
+    carrier: str | None = None
+    """Eigene Carrier-ID — aus der Mail oder so, wie der Dienst den Zusteller erkannt hat."""
+    shipment_id: str | None = None
+    """Die Sendung in HA, falls es eine gibt."""
+    status: ShipmentStatus | None = None
+    last_event: datetime | None = None
+    detail: str | None = None
+    """Fehlercode oder Grund, ohne Zugangsdaten."""
+    retry_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +125,10 @@ class TrackingSource(ABC):
     def diagnostics(self) -> dict[str, Any]:
         """Zustand fuer den Diagnostics-Download; ohne Zugangsdaten."""
         return {}
+
+    def tracking_report(self) -> list[TrackingReport] | None:
+        """Abgleich des letzten Durchlaufs je Nummer; `None` bei Quellen ohne Abgleich."""
+        return None
 
     async def async_setup(self) -> None:  # noqa: B027 — bewusst optionaler Haken
         """Verbindungen aufbauen und Konfiguration pruefen.
