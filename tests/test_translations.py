@@ -152,7 +152,7 @@ def test_sensor_keys_exist_in_strings_and_icons() -> None:
 def test_repairs_haben_titel_und_beschreibung() -> None:
     """Jeder Repairs-Eintrag aus `const.ISSUE_*` hat Titel und Text mit der Quelle."""
     issues = [value for name, value in vars(const).items() if name.startswith("ISSUE_")]
-    assert len(issues) == 4
+    assert len(issues) == 5
 
     for issue in issues:
         for part in ("title", "description"):

@@ -130,6 +130,16 @@ SEVENTEENTRACK_BACKOFF_MAX: Final = 3600.0
 # Eine abgelehnte Registrierung wird fruehestens nach einem Tag wiederholt.
 SEVENTEENTRACK_REJECT_RETRY: Final = 86400.0
 
+# 17TRACK-Benutzerkonto: dieselben Endpunkte wie die Website und die HA-Core-Integration.
+# Inoffiziell, dafuer ohne API-Schluessel und ohne Kontingent.
+SEVENTEENTRACK_ACCOUNT_LOGIN_URL: Final = "https://user.17track.net/user-api/v1/sign-in-by-password"
+SEVENTEENTRACK_ACCOUNT_URL: Final = "https://buyer.17track.net/orderapi/call"
+SEVENTEENTRACK_ACCOUNT_PAGE_SIZE: Final = 40
+# Die Website kennt keine dokumentierte Grenze; eine Anfrage je Sekunde bleibt unauffaellig.
+SEVENTEENTRACK_ACCOUNT_REQUEST_INTERVAL: Final = 1.0
+# Hoechstens so viele Nummern je Durchlauf neu ins Konto eintragen (eine Anfrage je Nummer).
+SEVENTEENTRACK_ACCOUNT_MAX_ADD: Final = 10
+
 # Obergrenze der Event-Historie je Sendung, damit der Store nicht unbegrenzt waechst.
 MAX_EVENTS_PER_SHIPMENT: Final = 50
 
@@ -149,11 +159,13 @@ DESTINATION_UNKNOWN_NAME: Final = "Unbekannt"
 # IDs der Datenquellen (Werte landen in `SourceRecord.source_id`).
 SOURCE_IMAP: Final = "imap"
 SOURCE_SEVENTEENTRACK: Final = "seventeentrack"
+SOURCE_SEVENTEENTRACK_ACCOUNT: Final = "seventeentrack_account"
 # Eingaben ueber die Actions `add_shipment` und `mark_delivered`.
 SOURCE_MANUAL: Final = "manual"
 
-# Quellentypen, die als `api_source` angelegt werden koennen.
-API_SOURCE_TYPES: Final = (SOURCE_SEVENTEENTRACK,)
+# Quellentypen, die als `api_source` angelegt werden koennen. Der erste ist die Vorauswahl:
+# das kostenlose Benutzerkonto vor der kostenpflichtigen API.
+API_SOURCE_TYPES: Final = (SOURCE_SEVENTEENTRACK_ACCOUNT, SOURCE_SEVENTEENTRACK)
 
 # Wertigkeit der Quellen beim Merge: Die API ist fuer den Status autoritativ,
 # die Mail liefert vor allem Kontext. Verfeinert wird das in Step 3.2.
@@ -161,6 +173,7 @@ DEFAULT_SOURCE_PRIORITY: Final = 0
 SOURCE_PRIORITIES: Final[dict[str, int]] = {
     SOURCE_IMAP: 10,
     SOURCE_SEVENTEENTRACK: 20,
+    SOURCE_SEVENTEENTRACK_ACCOUNT: 20,
 }
 
 # Actions (Step 2.5). Registriert einmal je HA-Start, nicht je Entry.
@@ -191,6 +204,7 @@ ATTR_BODY: Final = "body"
 ISSUE_MAILBOX_AUTH_FAILED: Final = "mailbox_auth_failed"
 ISSUE_MAILBOX_FOLDER_NOT_FOUND: Final = "mailbox_folder_not_found"
 ISSUE_API_KEY_INVALID: Final = "api_key_invalid"
+ISSUE_API_LOGIN_INVALID: Final = "api_login_invalid"
 ISSUE_API_QUOTA_EXHAUSTED: Final = "api_quota_exhausted"
 
 # Events auf dem HA-Bus. Sie feuern nur bei echten Aenderungen.

@@ -12,7 +12,8 @@ ausliest, den Zusteller erkennt und den Sendungsstand in Home Assistant bereitst
   Absender, Betreff und Trackingnummer.
 - **Zusteller:** DHL/Deutsche Post, Amazon, AliExpress, DPD, GLS, Hermes, UPS sowie ein
   generischer Fallback — jeder Zusteller ist ein Plugin.
-- **API-Quellen:** modular zuschaltbar (17track als generischer Fallback).
+- **Tracking-Quellen:** modular zuschaltbar, 17TRACK als generischer Fallback (siehe
+  [17TRACK](#17track)).
 - **In Home Assistant:** feste Zähler-Sensoren mit kompakter Sendungsliste als Attribut,
   eine Action `delivery_tracker.get_shipments` mit vollen Details, eine Kalender-Entity für
   erwartete Lieferungen und eine mitgelieferte Lovelace-Karte.
@@ -50,6 +51,24 @@ den Einstellungen zwei weitere Punkte:
   fallen Mails auf, die nicht erkannt wurden, etwa eine Zustellmail in neuem Format.
 
 Betreffs und Absender bleiben lokal im Store; die Diagnose-Datei enthält sie nicht.
+
+## 17TRACK
+
+Eine Tracking-Quelle holt den Sendungsstatus direkt vom Zusteller, auch wenn keine Mail mehr
+kommt. Unter **Einstellungen → Geräte & Dienste → Delivery Tracker → Tracking-Quelle
+hinzufügen** stehen zwei Varianten zur Wahl:
+
+| | 17TRACK-Konto | 17TRACK-API |
+|---|---|---|
+| Kosten | **kostenlos** | **kostenpflichtig** — kleines Startkontingent, danach Jahrespakete |
+| Anmeldung | E-Mail und Passwort des normalen 17TRACK-Kontos (App, 17track.net) | API-Schlüssel aus einem separaten Entwicklerkonto (api.17track.net) |
+| Schnittstelle | inoffiziell, wie die HA-Core-Integration 17TRACK — kann sich ohne Vorwarnung ändern | offiziell und dokumentiert |
+| Daten | letzter Stand je Sendung | volle Ereignis-Historie und Zustellfenster |
+
+Beide tragen neue Trackingnummern aus Mails ein und übernehmen Sendungen, die nur bei 17TRACK
+liegen. Zugestellte Sendungen werden im Konto archiviert bzw. bei der API abgemeldet. Bei der
+API kostet jede neu angemeldete Nummer eine Einheit Kontingent; das Konto kennt kein
+Kontingent. Für den privaten Haushalt ist das Konto die naheliegende Wahl.
 
 ## AliExpress
 

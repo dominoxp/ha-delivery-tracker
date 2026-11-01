@@ -101,6 +101,15 @@ async def start_subentry_flow(
     )
 
 
+async def start_api_source_flow(
+    hass: HomeAssistant, entry: ConfigEntry, source_type: str = "seventeentrack"
+) -> Any:
+    """Eine neue Tracking-Quelle starten und den Typ waehlen."""
+    result = await start_subentry_flow(hass, entry, SUBENTRY_API_SOURCE)
+    assert result["step_id"] == "user"
+    return await configure_subentry(hass, result, {"source_type": source_type})
+
+
 async def configure_subentry(hass: HomeAssistant, result: Any, user_input: dict[str, Any]) -> Any:
     """Einen Schritt eines Subentry-Flows ausfuellen und auf Reloads warten."""
     result = await hass.config_entries.subentries.async_configure(result["flow_id"], user_input)
@@ -184,11 +193,11 @@ async def test_vollstaendiger_ablauf_aller_subentry_typen(
     result = await configure_subentry(hass, result, {"name": "Büro", "postal_codes": ["54321"]})
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
-    result = await start_subentry_flow(hass, entry, SUBENTRY_API_SOURCE)
+    result = await start_api_source_flow(hass, entry)
     result = await configure_subentry(
         hass,
         result,
-        {"source_type": "seventeentrack", "api_key": VALID_API_KEY, "scan_interval": 1800},
+        {"api_key": VALID_API_KEY, "scan_interval": 1800},
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
@@ -518,11 +527,11 @@ async def test_api_source_schluessel_wird_geprueft(
 ) -> None:
     """Ein offensichtlich ungueltiger Schluessel wird abgewiesen, ein zweiter Eintrag auch."""
     entry = setup_integration
-    result = await start_subentry_flow(hass, entry, SUBENTRY_API_SOURCE)
+    result = await start_api_source_flow(hass, entry)
     result = await configure_subentry(
         hass,
         result,
-        {"source_type": "seventeentrack", "api_key": "zu kurz", "scan_interval": 1800},
+        {"api_key": "zu kurz", "scan_interval": 1800},
     )
     assert result["errors"] == {"base": "invalid_api_key"}
     assert "zu kurz" not in str(result)
@@ -530,10 +539,10 @@ async def test_api_source_schluessel_wird_geprueft(
     result = await configure_subentry(
         hass,
         result,
-        {"source_type": "seventeentrack", "api_key": f" {VALID_API_KEY} ", "scan_interval": 1800},
+        {"api_key": f" {VALID_API_KEY} ", "scan_interval": 1800},
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == "17TRACK"
+    assert result["title"] == "17TRACK API"
     (api,) = subentries_of(entry, SUBENTRY_API_SOURCE)
     assert api.data == {
         "source_type": "seventeentrack",
@@ -541,12 +550,8 @@ async def test_api_source_schluessel_wird_geprueft(
         "scan_interval": 1800,
     }
 
-    result = await start_subentry_flow(hass, entry, SUBENTRY_API_SOURCE)
-    result = await configure_subentry(
-        hass,
-        result,
-        {"source_type": "seventeentrack", "api_key": VALID_API_KEY, "scan_interval": 1800},
-    )
+    # Der zweite Eintrag desselben Typs scheitert schon an der Typauswahl.
+    result = await start_api_source_flow(hass, entry)
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
 
@@ -556,11 +561,9 @@ async def test_api_source_schluessel_wird_bei_17track_geprueft(
 ) -> None:
     """Formal gueltig, aber abgelehnt; Dienst nicht erreichbar; dann angenommen."""
     entry = setup_integration
-    result = await start_subentry_flow(hass, entry, SUBENTRY_API_SOURCE)
+    result = await start_api_source_flow(hass, entry)
     wrong = "F" * 32
-    result = await configure_subentry(
-        hass, result, {"source_type": "seventeentrack", "api_key": wrong, "scan_interval": 1800}
-    )
+    result = await configure_subentry(hass, result, {"api_key": wrong, "scan_interval": 1800})
     assert result["errors"] == {"base": "invalid_api_key"}
     assert seventeentrack.paths() == ["getquota"]
     assert wrong not in str(result)
@@ -569,7 +572,7 @@ async def test_api_source_schluessel_wird_bei_17track_geprueft(
     result = await configure_subentry(
         hass,
         result,
-        {"source_type": "seventeentrack", "api_key": VALID_API_KEY, "scan_interval": 1800},
+        {"api_key": VALID_API_KEY, "scan_interval": 1800},
     )
     assert result["errors"] == {"base": "cannot_connect"}
 
@@ -577,7 +580,7 @@ async def test_api_source_schluessel_wird_bei_17track_geprueft(
     result = await configure_subentry(
         hass,
         result,
-        {"source_type": "seventeentrack", "api_key": VALID_API_KEY, "scan_interval": 1800},
+        {"api_key": VALID_API_KEY, "scan_interval": 1800},
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
@@ -585,11 +588,11 @@ async def test_api_source_schluessel_wird_bei_17track_geprueft(
 async def test_api_source_bearbeiten(hass: HomeAssistant, setup_integration: ConfigEntry) -> None:
     """Leerer Schluessel bleibt, das Intervall aendert sich."""
     entry = setup_integration
-    result = await start_subentry_flow(hass, entry, SUBENTRY_API_SOURCE)
+    result = await start_api_source_flow(hass, entry)
     await configure_subentry(
         hass,
         result,
-        {"source_type": "seventeentrack", "api_key": VALID_API_KEY, "scan_interval": 1800},
+        {"api_key": VALID_API_KEY, "scan_interval": 1800},
     )
     (api,) = subentries_of(entry, SUBENTRY_API_SOURCE)
 

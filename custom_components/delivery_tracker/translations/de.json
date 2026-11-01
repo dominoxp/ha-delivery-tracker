@@ -150,37 +150,55 @@
       }
     },
     "api_source": {
-      "entry_type": "API-Quelle",
+      "entry_type": "Tracking-Quelle",
       "initiate_flow": {
-        "user": "API-Quelle hinzufügen"
+        "user": "Tracking-Quelle hinzufügen"
       },
       "step": {
         "user": {
-          "title": "API-Quelle hinzufügen",
-          "description": "Eine Tracking-API liefert den Sendungsstatus direkt vom Zusteller.",
+          "title": "Tracking-Quelle hinzufügen",
+          "description": "Eine Tracking-Quelle holt den Sendungsstatus direkt vom Zusteller, auch wenn keine Mail mehr kommt.\n\n- **17TRACK-Konto (privat, kostenlos):** Anmeldung mit E-Mail und Passwort deines normalen 17TRACK-Kontos, wie bei der Home-Assistant-Integration 17TRACK.\n- **17TRACK-API (kostenpflichtig):** offizielle Schnittstelle mit API-Schlüssel aus einem separaten Entwicklerkonto.",
           "data": {
-            "source_type": "Quelle",
+            "source_type": "Quelle"
+          }
+        },
+        "account": {
+          "title": "17TRACK-Konto (kostenlos)",
+          "description": "Zugangsdaten deines 17TRACK-Kontos, mit dem du dich auch in der App oder auf 17track.net anmeldest. Neue Trackingnummern aus Mails werden dort eingetragen, zugestellte Sendungen archiviert.",
+          "data": {
+            "username": "E-Mail-Adresse",
+            "password": "Passwort",
+            "scan_interval": "Abfrageintervall"
+          }
+        },
+        "api_key": {
+          "title": "17TRACK-API (kostenpflichtig)",
+          "description": "API-Schlüssel aus dem Entwicklerkonto unter api.17track.net. Jede neu angemeldete Trackingnummer verbraucht eine Einheit des gekauften Kontingents.",
+          "data": {
             "api_key": "API-Schlüssel",
             "scan_interval": "Abfrageintervall"
           }
         },
         "reconfigure": {
-          "title": "API-Quelle bearbeiten",
-          "description": "Einstellungen für {source}. Ein leeres Schlüsselfeld behält den gespeicherten Schlüssel.",
+          "title": "Tracking-Quelle bearbeiten",
+          "description": "Einstellungen für {source}. Ein leeres Schlüssel- oder Passwortfeld behält den gespeicherten Wert.",
           "data": {
             "api_key": "API-Schlüssel",
+            "username": "E-Mail-Adresse",
+            "password": "Passwort",
             "scan_interval": "Abfrageintervall"
           }
         }
       },
       "error": {
         "invalid_api_key": "Der API-Schlüssel ist ungültig.",
+        "invalid_auth": "E-Mail-Adresse oder Passwort sind falsch.",
         "cannot_connect": "Der Dienst ist nicht erreichbar.",
         "unknown": "Unerwarteter Fehler, Details stehen im Log."
       },
       "abort": {
         "already_configured": "Diese Quelle ist bereits eingerichtet.",
-        "reconfigure_successful": "Die API-Quelle wurde aktualisiert."
+        "reconfigure_successful": "Die Tracking-Quelle wurde aktualisiert."
       }
     }
   },
@@ -361,7 +379,8 @@
     },
     "source_type": {
       "options": {
-        "seventeentrack": "17TRACK"
+        "seventeentrack_account": "17TRACK-Konto (privat, kostenlos)",
+        "seventeentrack": "17TRACK-API (kostenpflichtig, API-Schlüssel)"
       }
     },
     "shipment_status": {
@@ -613,6 +632,10 @@
     "api_key_invalid": {
       "title": "API-Schlüssel für {source} ungültig",
       "description": "{source} lehnt den API-Schlüssel ab, vermutlich ist er abgelaufen oder wurde widerrufen. Die Quelle wird nicht mehr abgefragt.\n\nUnter **Einstellungen → Geräte & Dienste → Delivery Tracker** bei der API-Quelle {source} im Menü **Neu konfigurieren** wählen und einen gültigen Schlüssel eingeben.\n\nDieser Hinweis verschwindet, sobald die Quelle wieder abgefragt wurde."
+    },
+    "api_login_invalid": {
+      "title": "Anmeldung bei {source} fehlgeschlagen",
+      "description": "{source} lehnt E-Mail-Adresse oder Passwort ab, vermutlich wurde das Passwort geändert. Die Quelle wird nicht mehr abgefragt.\n\nUnter **Einstellungen → Geräte & Dienste → Delivery Tracker** bei der Tracking-Quelle {source} im Menü **Neu konfigurieren** die aktuellen Zugangsdaten eingeben.\n\nDieser Hinweis verschwindet, sobald die Quelle wieder abgefragt wurde."
     },
     "api_quota_exhausted": {
       "title": "Kontingent von {source} aufgebraucht",

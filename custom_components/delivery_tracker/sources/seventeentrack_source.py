@@ -1,4 +1,9 @@
-"""17TRACK als Quelle: Live-Status fuer Trackingnummern aus Mails und aus dem 17TRACK-Konto.
+"""17TRACK-API als Quelle: Live-Status fuer Trackingnummern aus Mails und aus dem API-Konto.
+
+Die offizielle Tracking-API ist kostenpflichtig: Jede registrierte Nummer
+kostet eine Einheit Kontingent, und das kostenlose Startkontingent ist klein.
+Ohne API-Schluessel arbeitet `seventeentrack_account_source` mit dem normalen
+17TRACK-Benutzerkonto. Was beide teilen, steht in `SeventeenTrackSourceBase`.
 
 Ein Durchlauf:
 
@@ -37,6 +42,7 @@ lassen diese Felder leer, damit der Merge sie nie ueberschreibt.
 from __future__ import annotations
 
 import logging
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -60,7 +66,13 @@ from ..const import (
 from ..merge import build_shipment_id
 from ..models import Shipment, ShipmentEvent, ShipmentStatus, SourceRecord
 from ..tracking import ChecksumResult, normalize_tracking_number
-from .base import API_SOURCE_FACTORIES, SourceContext, SourceError, TrackingSource
+from .base import (
+    API_SOURCE_FACTORIES,
+    SourceContext,
+    SourceError,
+    SourceRateLimitError,
+    TrackingSource,
+)
 from .seventeentrack_api import (
     CODE_ALREADY_REGISTERED,
     CODE_QUOTA_EXHAUSTED,
@@ -68,7 +80,6 @@ from .seventeentrack_api import (
     Quota,
     SeventeenTrackClient,
     SeventeenTrackQuotaError,
-    SeventeenTrackRateLimitError,
     TrackItem,
 )
 
@@ -94,6 +105,7 @@ class SeventeenTrackMapping:
     carriers: dict[str, tuple[int, ...]] = field(default_factory=dict)
     statuses: dict[str, ShipmentStatus] = field(default_factory=dict)
     sub_statuses: dict[str, ShipmentStatus] = field(default_factory=dict)
+    account_statuses: dict[int, ShipmentStatus] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> Self:
@@ -109,7 +121,16 @@ class SeventeenTrackMapping:
             str(key): ShipmentStatus(value)
             for key, value in (raw.get("sub_statuses") or {}).items()
         }
-        return cls(carriers=carriers, statuses=statuses, sub_statuses=sub_statuses)
+        account_statuses = {
+            int(key): ShipmentStatus(value)
+            for key, value in (raw.get("account_statuses") or {}).items()
+        }
+        return cls(
+            carriers=carriers,
+            statuses=statuses,
+            sub_statuses=sub_statuses,
+            account_statuses=account_statuses,
+        )
 
     def carrier_code(self, carrier_id: str) -> int | None:
         """Der Code, mit dem eine Nummer dieses Zustellers registriert wird."""
@@ -135,6 +156,10 @@ class SeventeenTrackMapping:
             # Events tragen oft nur den Unterstatus (`InTransit_Arrival`).
             status = sub_status.split("_", 1)[0] if isinstance(sub_status, str) else ""
         return self.statuses.get(status, ShipmentStatus.UNKNOWN)
+
+    def account_status(self, state: int) -> ShipmentStatus:
+        """Status des Benutzerkontos; Unbekanntes wird `unknown` und aendert nichts."""
+        return self.account_statuses.get(state, ShipmentStatus.UNKNOWN)
 
 
 def load_mapping(path: Path = MAPPING_FILE) -> SeventeenTrackMapping:
@@ -201,8 +226,147 @@ def _text(value: Any) -> str | None:
 # ----------------------------------------------------------------------
 
 
-class SeventeenTrackSource(TrackingSource):
-    """Gleicht die aktiven Sendungen mit 17TRACK ab und holt deren Status."""
+class SeventeenTrackSourceBase(TrackingSource, ABC):
+    """Was API- und Konto-Quelle von 17TRACK teilen.
+
+    Zuordnung, Drosselungs-Backoff, die Pruefung vor dem Eintragen einer
+    Nummer und die Identitaet der Fragmente. Den eigentlichen Abgleich
+    liefert die Unterklasse in `_async_sync`.
+    """
+
+    def __init__(
+        self,
+        context: SourceContext,
+        *,
+        hass: HomeAssistant | None = None,
+        mapping: SeventeenTrackMapping | None = None,
+        source_id: str,
+        priority: int | None = None,
+    ) -> None:
+        """Quelle anlegen; die Zuordnung wird ohne Vorgabe in `async_setup` geladen."""
+        super().__init__(source_id, priority=priority)
+        self._context = context
+        self._hass = hass
+        self._mapping = mapping
+        self._backoff = 0.0
+        self._backoff_until: datetime | None = None
+        self._rejected: dict[str, datetime] = {}
+        """Abgelehnte Nummern mit dem Zeitpunkt der Ablehnung."""
+        self._tracked = 0
+
+    @property
+    def mapping(self) -> SeventeenTrackMapping:
+        """Die geladene Zuordnung."""
+        if self._mapping is None:
+            raise SourceError("Zuordnung von 17TRACK ist nicht geladen")
+        return self._mapping
+
+    async def _async_load_mapping(self) -> None:
+        """Die Zuordnung laden, falls keine vorgegeben wurde."""
+        if self._mapping is None:
+            if self._hass is None:
+                raise SourceError("Ohne HA-Instanz laesst sich die Zuordnung nicht laden")
+            self._mapping = await async_get_mapping(self._hass)
+
+    def _backoff_diagnostics(self) -> dict[str, Any]:
+        """Gemeinsamer Teil der Diagnostics."""
+        return {
+            "tracked": self._tracked,
+            "rejected_numbers": len(self._rejected),
+            "backoff_seconds": self._backoff,
+            "backoff_until": self._backoff_until.isoformat() if self._backoff_until else None,
+        }
+
+    async def async_fetch(self) -> list[Shipment]:
+        """Ein Abgleich mit 17TRACK; liefert die Fragmente aller verfolgten Nummern."""
+        now = dt_util.utcnow()
+        if self._backoff_until is not None and now < self._backoff_until:
+            raise SourceRateLimitError(
+                f"Drosselung, naechster Versuch ab {self._backoff_until.isoformat()}"
+            )
+        try:
+            shipments = await self._async_sync(now)
+        except SourceRateLimitError as err:
+            retry_after = getattr(err, "retry_after", None) or 0
+            self._backoff = min(
+                max(self._backoff * 2, SEVENTEENTRACK_BACKOFF_START, retry_after),
+                SEVENTEENTRACK_BACKOFF_MAX,
+            )
+            self._backoff_until = now + timedelta(seconds=self._backoff)
+            _LOGGER.debug("17TRACK drosselt, Pause %.0f s", self._backoff)
+            raise
+        self._backoff = 0.0
+        self._backoff_until = None
+        return shipments
+
+    @abstractmethod
+    async def _async_sync(self, now: datetime) -> list[Shipment]:
+        """Ein Durchlauf gegen den Dienst."""
+
+    def _known_by_number(self) -> dict[str, Shipment]:
+        """Der Bestand des Stores nach normalisierter Trackingnummer."""
+        known: dict[str, Shipment] = {}
+        for shipment in self._context.known_shipments():
+            if shipment.tracking_number:
+                known.setdefault(normalize_tracking_number(shipment.tracking_number), shipment)
+        return known
+
+    def _prune_rejected(self, now: datetime) -> None:
+        """Ablehnungen vergessen, deren Sperrfrist abgelaufen ist."""
+        retry_before = now - timedelta(seconds=SEVENTEENTRACK_REJECT_RETRY)
+        self._rejected = {
+            number: when for number, when in self._rejected.items() if when > retry_before
+        }
+
+    def _is_registrable(self, shipment: Shipment, number: str) -> bool:
+        """Besteht die Nummer die Pruefung ihres Zustellers?
+
+        Der generische Fallback faengt bewusst weit — von ihm wird nur
+        eingetragen, was eine stimmende Pruefziffer hat.
+        """
+        if not _MIN_NUMBER_LENGTH <= len(number) <= _MAX_NUMBER_LENGTH or not number.isalnum():
+            return False
+        registry = self._context.registry
+        if registry is None:
+            return True
+        plugin = registry.get(shipment.carrier)
+        if plugin is None:
+            return any(result is ChecksumResult.VALID for _, result in registry.identify(number))
+        result = plugin.check_tracking_number(number)
+        if shipment.carrier == CARRIER_GENERIC:
+            return result is ChecksumResult.VALID
+        return result is not None and result is not ChecksumResult.INVALID
+
+    def _identity(
+        self, number: str, code: Any, local: Shipment | None
+    ) -> tuple[str, str, str | None]:
+        """Carrier, Sendungs-ID und Verfolgungslink.
+
+        Eine bekannte Sendung behaelt ihre ID — nur so landet der Stand von
+        17TRACK bei der Mail. Fuer Nummern, die nur 17TRACK kennt, entscheidet
+        die Zuordnungsdatei, dann das Format der Nummer, zuletzt der Fallback.
+        """
+        if local is not None:
+            return local.carrier, local.id, None
+
+        carrier = self.mapping.carrier_id(code)
+        registry = self._context.registry
+        if carrier is None and registry is not None and (found := registry.identify(number)):
+            plugin = found[0][0]
+            carrier = plugin.carrier_for_number(number)
+        carrier = carrier or CARRIER_GENERIC
+
+        plugin = registry.get(carrier) if registry is not None else None
+        url = plugin.tracking_url(number) if plugin is not None else None
+        return (
+            carrier,
+            build_shipment_id(carrier, number),
+            url or f"https://t.17track.net/#nums={number}",
+        )
+
+
+class SeventeenTrackSource(SeventeenTrackSourceBase):
+    """Gleicht die aktiven Sendungen mit der 17TRACK-API ab und holt deren Status."""
 
     def __init__(
         self,
@@ -215,31 +379,18 @@ class SeventeenTrackSource(TrackingSource):
         priority: int | None = None,
     ) -> None:
         """Quelle anlegen; die Zuordnung wird ohne Vorgabe in `async_setup` geladen."""
-        super().__init__(source_id, priority=priority)
+        super().__init__(
+            context, hass=hass, mapping=mapping, source_id=source_id, priority=priority
+        )
         self._client = client
-        self._context = context
-        self._hass = hass
-        self._mapping = mapping
         self._quota: Quota | None = None
         self._quota_checked: datetime | None = None
         self._quota_error: SeventeenTrackQuotaError | None = None
-        self._backoff = 0.0
-        self._backoff_until: datetime | None = None
-        self._rejected: dict[str, datetime] = {}
-        """Abgelehnte Nummern mit dem Zeitpunkt der Ablehnung."""
-        self._tracked = 0
         self._stats = {"registered": 0, "rejected": 0, "stopped": 0, "fetched": 0}
 
     # ------------------------------------------------------------------
     # Zustand nach aussen
     # ------------------------------------------------------------------
-
-    @property
-    def mapping(self) -> SeventeenTrackMapping:
-        """Die geladene Zuordnung."""
-        if self._mapping is None:
-            raise SourceError("Zuordnung von 17TRACK ist nicht geladen")
-        return self._mapping
 
     @property
     def warning(self) -> SourceError | None:
@@ -257,11 +408,8 @@ class SeventeenTrackSource(TrackingSource):
             "quota": self._quota.as_dict() if self._quota else None,
             "quota_checked": self._quota_checked.isoformat() if self._quota_checked else None,
             "quota_exhausted": self._quota_error is not None,
-            "tracked": self._tracked,
             "requests": self._client.requests,
-            "rejected_numbers": len(self._rejected),
-            "backoff_seconds": self._backoff,
-            "backoff_until": self._backoff_until.isoformat() if self._backoff_until else None,
+            **self._backoff_diagnostics(),
             **self._stats,
         }
 
@@ -271,32 +419,8 @@ class SeventeenTrackSource(TrackingSource):
 
     async def async_setup(self) -> None:
         """Zuordnung laden und den Schluessel ueber das Kontingent pruefen."""
-        if self._mapping is None:
-            if self._hass is None:
-                raise SourceError("Ohne HA-Instanz laesst sich die Zuordnung nicht laden")
-            self._mapping = await async_get_mapping(self._hass)
+        await self._async_load_mapping()
         await self._async_update_quota(dt_util.utcnow())
-
-    async def async_fetch(self) -> list[Shipment]:
-        """Ein Abgleich mit 17TRACK; liefert die Fragmente aller verfolgten Nummern."""
-        now = dt_util.utcnow()
-        if self._backoff_until is not None and now < self._backoff_until:
-            raise SeventeenTrackRateLimitError(
-                f"Drosselung, naechster Versuch ab {self._backoff_until.isoformat()}"
-            )
-        try:
-            shipments = await self._async_sync(now)
-        except SeventeenTrackRateLimitError as err:
-            self._backoff = min(
-                max(self._backoff * 2, SEVENTEENTRACK_BACKOFF_START, err.retry_after or 0),
-                SEVENTEENTRACK_BACKOFF_MAX,
-            )
-            self._backoff_until = now + timedelta(seconds=self._backoff)
-            _LOGGER.debug("17TRACK drosselt, Pause %.0f s", self._backoff)
-            raise
-        self._backoff = 0.0
-        self._backoff_until = None
-        return shipments
 
     # ------------------------------------------------------------------
     # Ein Durchlauf
@@ -352,14 +476,6 @@ class SeventeenTrackSource(TrackingSource):
         await self._async_stop(finished, remote)
         return shipments
 
-    def _known_by_number(self) -> dict[str, Shipment]:
-        """Der Bestand des Stores nach normalisierter Trackingnummer."""
-        known: dict[str, Shipment] = {}
-        for shipment in self._context.known_shipments():
-            if shipment.tracking_number:
-                known.setdefault(normalize_tracking_number(shipment.tracking_number), shipment)
-        return known
-
     async def _async_stop(self, numbers: list[str], remote: Mapping[str, int | None]) -> None:
         """Nummern abmelden; Ablehnungen (schon gestoppt) sind bedeutungslos."""
         if not numbers:
@@ -373,10 +489,7 @@ class SeventeenTrackSource(TrackingSource):
 
     async def _async_register(self, candidates: list[Shipment], now: datetime) -> None:
         """Neue Nummern registrieren — nur gepruefte, und nur bei vorhandenem Kontingent."""
-        retry_before = now - timedelta(seconds=SEVENTEENTRACK_REJECT_RETRY)
-        self._rejected = {
-            number: when for number, when in self._rejected.items() if when > retry_before
-        }
+        self._prune_rejected(now)
         items = [
             TrackItem(number, self.mapping.carrier_code(shipment.carrier))
             for shipment in candidates
@@ -450,25 +563,6 @@ class SeventeenTrackSource(TrackingSource):
         self._quota = await self._client.async_get_quota()
         self._quota_checked = now
 
-    def _is_registrable(self, shipment: Shipment, number: str) -> bool:
-        """Besteht die Nummer die Pruefung ihres Zustellers?
-
-        Der generische Fallback faengt bewusst weit — von ihm wird nur
-        registriert, was eine stimmende Pruefziffer hat.
-        """
-        if not _MIN_NUMBER_LENGTH <= len(number) <= _MAX_NUMBER_LENGTH or not number.isalnum():
-            return False
-        registry = self._context.registry
-        if registry is None:
-            return True
-        plugin = registry.get(shipment.carrier)
-        if plugin is None:
-            return any(result is ChecksumResult.VALID for _, result in registry.identify(number))
-        result = plugin.check_tracking_number(number)
-        if shipment.carrier == CARRIER_GENERIC:
-            return result is ChecksumResult.VALID
-        return result is not None and result is not ChecksumResult.INVALID
-
     # ------------------------------------------------------------------
     # Fragmente bauen
     # ------------------------------------------------------------------
@@ -514,33 +608,6 @@ class SeventeenTrackSource(TrackingSource):
             sources=[SourceRecord(source_id=self.source_id, fetched_at=now)],
             first_seen=min(now, events[0].timestamp) if events else now,
             last_updated=latest_time or now,
-        )
-
-    def _identity(
-        self, number: str, code: Any, local: Shipment | None
-    ) -> tuple[str, str, str | None]:
-        """Carrier, Sendungs-ID und Verfolgungslink.
-
-        Eine bekannte Sendung behaelt ihre ID — nur so landet der API-Stand bei
-        der Mail. Fuer Nummern, die nur 17TRACK kennt, entscheidet die
-        Zuordnungsdatei, dann das Format der Nummer, zuletzt der Fallback.
-        """
-        if local is not None:
-            return local.carrier, local.id, None
-
-        carrier = self.mapping.carrier_id(code)
-        registry = self._context.registry
-        if carrier is None and registry is not None and (found := registry.identify(number)):
-            plugin = found[0][0]
-            carrier = plugin.carrier_for_number(number)
-        carrier = carrier or CARRIER_GENERIC
-
-        plugin = registry.get(carrier) if registry is not None else None
-        url = plugin.tracking_url(number) if plugin is not None else None
-        return (
-            carrier,
-            build_shipment_id(carrier, number),
-            url or f"https://t.17track.net/#nums={number}",
         )
 
     def _events(self, info: Mapping[str, Any]) -> list[ShipmentEvent]:

@@ -6,7 +6,9 @@ mit, eine eigene Listenverwaltung gibt es deshalb nicht:
 
 * `mailbox`: ein IMAP-Postfach, mit Verbindungstest und Ordnerauswahl,
 * `destination`: ein Zielort mit seinen Match-Regeln (bekommt ein eigenes Device),
-* `api_source`: eine Tracking-API, deren Schluessel beim Anlegen gegen die API geprueft wird.
+* `api_source`: eine Tracking-Quelle — das kostenlose 17TRACK-Konto (E-Mail und
+  Passwort) oder die kostenpflichtige 17TRACK-API (Schluessel); die Zugangsdaten
+  werden beim Anlegen gegen den Dienst geprueft.
 
 Die globalen Einstellungen stehen in den Options des Hub-Entries. Jede Aenderung
 an Subentries oder Options laedt den Entry ueber den Update-Listener aus
@@ -39,7 +41,10 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import (
+    async_create_clientsession,
+    async_get_clientsession,
+)
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
@@ -96,6 +101,7 @@ from .const import (
     DOMAIN,
     REAUTH_SUBENTRY_ID,
     SOURCE_SEVENTEENTRACK,
+    SOURCE_SEVENTEENTRACK_ACCOUNT,
     SUBENTRY_API_SOURCE,
     SUBENTRY_DESTINATION,
     SUBENTRY_MAILBOX,
@@ -119,6 +125,11 @@ from .sources.imap_source import (
     ImapSecurity,
     ImapSource,
     MailFolder,
+)
+from .sources.seventeentrack_account_api import (
+    SeventeenTrackAccountAuthError,
+    SeventeenTrackAccountClient,
+    SeventeenTrackAccountError,
 )
 from .sources.seventeentrack_api import (
     SeventeenTrackAuthError,
@@ -300,17 +311,18 @@ class DeliveryTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason=ABORT_REAUTH_UNKNOWN_SOURCE)
 
         is_mailbox = subentry.subentry_type == SUBENTRY_MAILBOX
-        secret = CONF_PASSWORD if is_mailbox else CONF_API_KEY
+        secret = (
+            CONF_PASSWORD
+            if is_mailbox
+            else api_source_secret(str(subentry.data.get(CONF_SOURCE_TYPE, "")))
+        )
         errors: dict[str, str] = {}
         if user_input is not None:
-            value = str(user_input[secret])
-            data = {**subentry.data, secret: value if is_mailbox else value.strip()}
+            data = {**subentry.data, secret: _clean_secret(secret, user_input[secret])}
             if is_mailbox:
                 error = await async_test_folder(data)
             else:
-                error = await async_validate_api_key(
-                    self.hass, data[CONF_SOURCE_TYPE], data[CONF_API_KEY]
-                )
+                error = await async_validate_api_source(self.hass, data)
             if error is None:
                 # Der Update-Listener laedt den Entry danach neu.
                 self.hass.config_entries.async_update_subentry(entry, subentry, data=data)
@@ -649,13 +661,16 @@ class DestinationSubentryFlow(ConfigSubentryFlow):
 # ----------------------------------------------------------------------
 
 
-async def _async_validate_seventeentrack_key(hass: HomeAssistant, api_key: str) -> str | None:
+async def _async_validate_seventeentrack_key(
+    hass: HomeAssistant, data: Mapping[str, Any]
+) -> str | None:
     """Einen 17TRACK-Schluessel pruefen. Liefert ggf. einen Fehlerschluessel.
 
     Tippfehler wie Leerzeichen fallen ohne Anfrage durch; sonst fragt die
     Pruefung das Kontingent ab — das kostet nichts und scheitert an einem
     ungueltigen Schluessel.
     """
+    api_key = str(data[CONF_API_KEY])
     if len(api_key) < 16 or any(char.isspace() for char in api_key):
         return ERROR_INVALID_API_KEY
     client = SeventeenTrackClient(async_get_clientsession(hass), api_key)
@@ -669,47 +684,157 @@ async def _async_validate_seventeentrack_key(hass: HomeAssistant, api_key: str) 
     return None
 
 
-# Pruefung des API-Schluessels je Quellentyp. Neue Quellen tragen sich hier ein.
-API_KEY_VALIDATORS: dict[str, Callable[[HomeAssistant, str], Awaitable[str | None]]] = {
+async def _async_validate_seventeentrack_account(
+    hass: HomeAssistant, data: Mapping[str, Any]
+) -> str | None:
+    """Mit dem 17TRACK-Benutzerkonto anmelden. Liefert ggf. einen Fehlerschluessel."""
+    if not str(data[CONF_USERNAME]).strip() or not str(data[CONF_PASSWORD]):
+        return ERROR_INVALID_AUTH
+    client = SeventeenTrackAccountClient(
+        async_create_clientsession(hass, auto_cleanup=False),
+        str(data[CONF_USERNAME]),
+        str(data[CONF_PASSWORD]),
+        request_interval=0,
+    )
+    try:
+        async with asyncio.timeout(CONNECTION_TEST_TIMEOUT):
+            await client.async_login()
+    except SeventeenTrackAccountAuthError:
+        return ERROR_INVALID_AUTH
+    except SeventeenTrackAccountError, TimeoutError:
+        return ERROR_CANNOT_CONNECT
+    finally:
+        await client.async_close()
+    return None
+
+
+# Pruefung der Zugangsdaten je Quellentyp. Neue Quellen tragen sich hier ein.
+API_SOURCE_VALIDATORS: dict[
+    str, Callable[[HomeAssistant, Mapping[str, Any]], Awaitable[str | None]]
+] = {
     SOURCE_SEVENTEENTRACK: _async_validate_seventeentrack_key,
+    SOURCE_SEVENTEENTRACK_ACCOUNT: _async_validate_seventeentrack_account,
 }
 
 API_SOURCE_TITLES = {
-    SOURCE_SEVENTEENTRACK: "17TRACK",
+    SOURCE_SEVENTEENTRACK: "17TRACK API",
+    SOURCE_SEVENTEENTRACK_ACCOUNT: "17TRACK-Konto",
+}
+
+# Das Geheimnis je Quellentyp: Es wird nie ins Formular zurueckgeschickt, bleibt
+# beim Bearbeiten leer und ist das einzige Feld der Neuanmeldung.
+API_SOURCE_SECRETS = {
+    SOURCE_SEVENTEENTRACK: CONF_API_KEY,
+    SOURCE_SEVENTEENTRACK_ACCOUNT: CONF_PASSWORD,
+}
+
+# Schritt mit den Zugangsdaten je Quellentyp.
+STEP_API_KEY = "api_key"
+STEP_ACCOUNT = "account"
+API_SOURCE_STEPS = {
+    SOURCE_SEVENTEENTRACK: STEP_API_KEY,
+    SOURCE_SEVENTEENTRACK_ACCOUNT: STEP_ACCOUNT,
 }
 
 
-async def async_validate_api_key(hass: HomeAssistant, source_type: str, api_key: str) -> str | None:
-    """Den Schluessel fuer den Quellentyp pruefen. Liefert ggf. einen Fehlerschluessel."""
-    validator = API_KEY_VALIDATORS.get(source_type)
+def api_source_secret(source_type: str) -> str:
+    """Das Feld mit dem Geheimnis eines Quellentyps."""
+    return API_SOURCE_SECRETS.get(source_type, CONF_API_KEY)
+
+
+def _clean_secret(field: str, value: Any) -> str:
+    """API-Schluessel ohne Leerraum am Rand; Passwoerter bleiben, wie sie sind."""
+    text = str(value or "")
+    return text.strip() if field == CONF_API_KEY else text
+
+
+async def async_validate_api_source(hass: HomeAssistant, data: Mapping[str, Any]) -> str | None:
+    """Die Zugangsdaten fuer den Quellentyp pruefen. Liefert ggf. einen Fehlerschluessel."""
+    source_type = str(data.get(CONF_SOURCE_TYPE, ""))
+    validator = API_SOURCE_VALIDATORS.get(source_type)
     if validator is None:
         return ERROR_UNKNOWN
     try:
-        return await validator(hass, api_key)
+        return await validator(hass, data)
     except Exception:
-        _LOGGER.exception("Unerwarteter Fehler bei der Pruefung des %s-Schluessels", source_type)
+        _LOGGER.exception("Unerwarteter Fehler bei der Pruefung der Quelle %s", source_type)
         return ERROR_UNKNOWN
 
 
+def _credential_schema(source_type: str, *, reconfigure: bool) -> dict[Any, Any]:
+    """Die Felder fuer die Zugangsdaten; beim Bearbeiten ist das Geheimnis optional."""
+    secret = api_source_secret(source_type)
+    fields: dict[Any, Any] = {}
+    if source_type == SOURCE_SEVENTEENTRACK_ACCOUNT:
+        fields[vol.Required(CONF_USERNAME)] = TextSelector(
+            TextSelectorConfig(type=TextSelectorType.EMAIL, autocomplete="username")
+        )
+    marker = vol.Optional if reconfigure else vol.Required
+    fields[marker(secret)] = _PASSWORD_SELECTOR
+    return fields
+
+
 class ApiSourceSubentryFlow(ConfigSubentryFlow):
-    """Eine Tracking-API anlegen oder bearbeiten; je Quellentyp nur einmal."""
+    """Eine Tracking-Quelle anlegen oder bearbeiten; je Quellentyp nur einmal.
+
+    Erst die Quelle waehlen — kostenloses 17TRACK-Konto oder kostenpflichtige
+    17TRACK-API —, dann deren Zugangsdaten.
+    """
+
+    _source_type: str = API_SOURCE_TYPES[0]
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
-        """Neue API-Quelle."""
-        errors: dict[str, str] = {}
+        """Neue Quelle: den Typ waehlen."""
         if user_input is not None:
-            source_type = user_input[CONF_SOURCE_TYPE]
+            self._source_type = str(user_input[CONF_SOURCE_TYPE])
             if any(
-                subentry.unique_id == source_type
+                subentry.unique_id == self._source_type
                 for subentry in _other_subentries(self, SUBENTRY_API_SOURCE)
             ):
                 return self.async_abort(reason=ABORT_ALREADY_CONFIGURED)
-            data = {
-                CONF_SOURCE_TYPE: source_type,
-                CONF_API_KEY: str(user_input[CONF_API_KEY]).strip(),
-                CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL]),
+            if self._source_type == SOURCE_SEVENTEENTRACK_ACCOUNT:
+                return await self.async_step_account()
+            return await self.async_step_api_key()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_SOURCE_TYPE, default=API_SOURCE_TYPES[0]): SelectSelector(
+                    SelectSelectorConfig(
+                        options=list(API_SOURCE_TYPES),
+                        mode=SelectSelectorMode.LIST,
+                        translation_key=CONF_SOURCE_TYPE,
+                    )
+                ),
             }
-            error = await async_validate_api_key(self.hass, source_type, data[CONF_API_KEY])
+        )
+        return self.async_show_form(step_id="user", data_schema=schema)
+
+    async def async_step_api_key(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Kostenpflichtige 17TRACK-API: Schluessel und Intervall."""
+        return await self._async_step_credentials(STEP_API_KEY, user_input)
+
+    async def async_step_account(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Kostenloses 17TRACK-Konto: E-Mail, Passwort und Intervall."""
+        return await self._async_step_credentials(STEP_ACCOUNT, user_input)
+
+    async def _async_step_credentials(
+        self, step_id: str, user_input: dict[str, Any] | None
+    ) -> SubentryFlowResult:
+        """Zugangsdaten abfragen, pruefen und die Quelle anlegen."""
+        source_type = self._source_type
+        secret = api_source_secret(source_type)
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            data: dict[str, Any] = {CONF_SOURCE_TYPE: source_type}
+            if CONF_USERNAME in user_input:
+                data[CONF_USERNAME] = str(user_input[CONF_USERNAME]).strip()
+            data[secret] = _clean_secret(secret, user_input[secret])
+            data[CONF_SCAN_INTERVAL] = int(user_input[CONF_SCAN_INTERVAL])
+            error = await async_validate_api_source(self.hass, data)
             if error is None:
                 return self.async_create_entry(
                     title=API_SOURCE_TITLES.get(source_type, source_type),
@@ -720,23 +845,16 @@ class ApiSourceSubentryFlow(ConfigSubentryFlow):
 
         schema = vol.Schema(
             {
-                vol.Required(CONF_SOURCE_TYPE, default=API_SOURCE_TYPES[0]): SelectSelector(
-                    SelectSelectorConfig(
-                        options=list(API_SOURCE_TYPES),
-                        mode=SelectSelectorMode.DROPDOWN,
-                        translation_key=CONF_SOURCE_TYPE,
-                    )
-                ),
-                vol.Required(CONF_API_KEY): _PASSWORD_SELECTOR,
+                **_credential_schema(source_type, reconfigure=False),
                 vol.Required(
                     CONF_SCAN_INTERVAL, default=DEFAULT_API_SCAN_INTERVAL
                 ): _seconds_selector(MIN_API_SCAN_INTERVAL, MAX_POLL_INTERVAL),
             }
         )
         return self.async_show_form(
-            step_id="user",
+            step_id=step_id,
             data_schema=self.add_suggested_values_to_schema(
-                schema, {k: v for k, v in (user_input or {}).items() if k != CONF_API_KEY}
+                schema, {k: v for k, v in (user_input or {}).items() if k != secret}
             ),
             errors=errors,
         )
@@ -744,36 +862,39 @@ class ApiSourceSubentryFlow(ConfigSubentryFlow):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        """Schluessel und Intervall aendern; der Quellentyp steht fest."""
+        """Zugangsdaten und Intervall aendern; der Quellentyp steht fest."""
         subentry = self._get_reconfigure_subentry()
+        source_type = str(subentry.data.get(CONF_SOURCE_TYPE, ""))
+        secret = api_source_secret(source_type)
         errors: dict[str, str] = {}
         if user_input is not None:
             data = {
                 **subentry.data,
-                CONF_API_KEY: str(user_input.get(CONF_API_KEY) or "").strip()
-                or subentry.data[CONF_API_KEY],
+                secret: _clean_secret(secret, user_input.get(secret)) or subentry.data[secret],
                 CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL]),
             }
-            error = await async_validate_api_key(
-                self.hass, data[CONF_SOURCE_TYPE], data[CONF_API_KEY]
-            )
+            if CONF_USERNAME in user_input:
+                data[CONF_USERNAME] = str(user_input[CONF_USERNAME]).strip()
+            error = await async_validate_api_source(self.hass, data)
             if error is None:
                 return self.async_update_and_abort(self._get_entry(), subentry, data=data)
             errors["base"] = error
 
         schema = vol.Schema(
             {
-                vol.Optional(CONF_API_KEY): _PASSWORD_SELECTOR,
+                **_credential_schema(source_type, reconfigure=True),
                 vol.Required(CONF_SCAN_INTERVAL): _seconds_selector(
                     MIN_API_SCAN_INTERVAL, MAX_POLL_INTERVAL
                 ),
             }
         )
+        suggested = {
+            CONF_SCAN_INTERVAL: subentry.data.get(CONF_SCAN_INTERVAL),
+            CONF_USERNAME: subentry.data.get(CONF_USERNAME),
+        }
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=self.add_suggested_values_to_schema(
-                schema, {CONF_SCAN_INTERVAL: subentry.data.get(CONF_SCAN_INTERVAL)}
-            ),
+            data_schema=self.add_suggested_values_to_schema(schema, suggested),
             errors=errors,
             description_placeholders={"source": subentry.title},
         )

@@ -693,7 +693,7 @@ class DeliveryTrackerCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 shipments = await source.async_fetch()
         except SourceAuthError as err:
             self._mark_failed(handle, SourceState.AUTH_FAILED, str(err))
-            handle.issue = (
+            handle.issue = source.auth_issue or (
                 ISSUE_MAILBOX_AUTH_FAILED
                 if handle.kind == SUBENTRY_MAILBOX
                 else ISSUE_API_KEY_INVALID

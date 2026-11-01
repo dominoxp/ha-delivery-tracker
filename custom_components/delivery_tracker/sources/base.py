@@ -58,6 +58,9 @@ class SourceContext:
 class TrackingSource(ABC):
     """Basisklasse fuer E-Mail-, API- und kuenftige Quellen."""
 
+    auth_issue: str | None = None
+    """Repairs-Eintrag bei abgelehnten Zugangsdaten; ohne Angabe der Standard der Quellenart."""
+
     def __init__(self, source_id: str, *, priority: int | None = None) -> None:
         """Quelle mit ihrer ID und Wertigkeit anlegen.
 

@@ -150,37 +150,55 @@
       }
     },
     "api_source": {
-      "entry_type": "API source",
+      "entry_type": "Tracking source",
       "initiate_flow": {
-        "user": "Add API source"
+        "user": "Add tracking source"
       },
       "step": {
         "user": {
-          "title": "Add API source",
-          "description": "A tracking API provides the shipment status directly from the carrier.",
+          "title": "Add tracking source",
+          "description": "A tracking source fetches the shipment status directly from the carrier, even when no further mail arrives.\n\n- **17TRACK account (personal, free):** signs in with the email and password of your regular 17TRACK account, like the Home Assistant 17TRACK integration.\n- **17TRACK API (paid):** official interface with an API key from a separate developer account.",
           "data": {
-            "source_type": "Source",
+            "source_type": "Source"
+          }
+        },
+        "account": {
+          "title": "17TRACK account (free)",
+          "description": "Credentials of your 17TRACK account, the one you use in the app or on 17track.net. New tracking numbers from mails are added there, delivered shipments are archived.",
+          "data": {
+            "username": "Email address",
+            "password": "Password",
+            "scan_interval": "Polling interval"
+          }
+        },
+        "api_key": {
+          "title": "17TRACK API (paid)",
+          "description": "API key from the developer account at api.17track.net. Every newly registered tracking number uses one unit of the purchased quota.",
+          "data": {
             "api_key": "API key",
             "scan_interval": "Polling interval"
           }
         },
         "reconfigure": {
-          "title": "Edit API source",
-          "description": "Settings for {source}. An empty key field keeps the stored key.",
+          "title": "Edit tracking source",
+          "description": "Settings for {source}. An empty key or password field keeps the stored value.",
           "data": {
             "api_key": "API key",
+            "username": "Email address",
+            "password": "Password",
             "scan_interval": "Polling interval"
           }
         }
       },
       "error": {
         "invalid_api_key": "The API key is invalid.",
+        "invalid_auth": "Email address or password is incorrect.",
         "cannot_connect": "The service cannot be reached.",
         "unknown": "Unexpected error, see the log for details."
       },
       "abort": {
         "already_configured": "This source is already set up.",
-        "reconfigure_successful": "The API source has been updated."
+        "reconfigure_successful": "The tracking source has been updated."
       }
     }
   },
@@ -361,7 +379,8 @@
     },
     "source_type": {
       "options": {
-        "seventeentrack": "17TRACK"
+        "seventeentrack_account": "17TRACK account (personal, free)",
+        "seventeentrack": "17TRACK API (paid, API key)"
       }
     },
     "shipment_status": {
@@ -613,6 +632,10 @@
     "api_key_invalid": {
       "title": "API key for {source} is invalid",
       "description": "{source} rejects the API key; it has probably expired or been revoked. The source is no longer queried.\n\nGo to **Settings → Devices & services → Delivery Tracker**, open the menu of the API source {source}, choose **Reconfigure** and enter a valid key.\n\nThis notice disappears as soon as the source has been queried successfully again."
+    },
+    "api_login_invalid": {
+      "title": "Sign-in to {source} failed",
+      "description": "{source} rejects the email address or password; the password has probably been changed. The source is no longer queried.\n\nGo to **Settings → Devices & services → Delivery Tracker**, open the menu of the tracking source {source}, choose **Reconfigure** and enter the current credentials.\n\nThis notice disappears as soon as the source has been queried successfully again."
     },
     "api_quota_exhausted": {
       "title": "Quota of {source} used up",

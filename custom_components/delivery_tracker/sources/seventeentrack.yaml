@@ -1,4 +1,4 @@
-# Zuordnung zwischen 17TRACK und dieser Integration (API v2.4).
+# Zuordnung zwischen 17TRACK und dieser Integration (API v2.4 und Benutzerkonto).
 #
 # Gelesen von `seventeentrack_source.py`. Neue Zusteller oder geaenderte Codes
 # kommen hier dazu, ohne den Code anzufassen.
@@ -53,3 +53,15 @@ sub_statuses:
   Exception_Lost: delivery_failed
   Exception_Destroyed: delivery_failed
   Exception_Cancel: delivery_failed
+
+# Status des Benutzerkontos (`FPackageState`, nur `seventeentrack_account_source`).
+# Das Konto kennt nur diese groben Zustaende, keine Unterstatus.
+account_statuses:
+  0: unknown            # Not Found
+  10: in_transit        # In Transit
+  # Lange ohne Neuigkeit: kein neuer Stand, der eigene bleibt stehen.
+  20: unknown           # Expired
+  30: ready_for_pickup  # Ready to be Picked Up
+  35: delivery_failed   # Undelivered
+  40: delivered         # Delivered
+  50: delayed           # Alert
