@@ -502,6 +502,7 @@
         "tracking_last_event": "last event {time}",
         "tracking_pending_quota": "quota exhausted",
         "tracking_pending_limit": "at most 10 per run",
+        "tracking_carrier_set": "carrier set at 17TRACK",
         "tracking_code": "code {code}",
         "tracking_retry": "next attempt {time}"
       }

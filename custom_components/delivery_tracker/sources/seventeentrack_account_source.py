@@ -12,11 +12,15 @@ Ein Durchlauf:
 GetTrackInfoList ──▶ was liegt im Konto?               (je 40 gebuendelt)
    │
    ├─▶ SetTrackArchived  abgeschlossene Sendungen archivieren
+   ├─▶ SetTrackCarrier   Zusteller festlegen, wo 17TRACK ihn nicht erkannt hat
    ├─▶ AddTrackNo        neue, gepruefte Nummern aus Mails (hoechstens 10 je Durchlauf)
    └─▶ Fragmente aus der Liste; zugestellte gleich archivieren
 ```
 
 Neu eingetragene Nummern tauchen erst im naechsten Durchlauf in der Liste auf.
+Passt eine Nummer zu mehreren Zustellern (bei DPD und GLS ueblich), legt
+17TRACK keinen fest und fragt sie nie ab — wie in der App muss jemand waehlen.
+Das uebernimmt die Quelle mit dem Zusteller aus Mail oder Action.
 Archiviert wird wie in der App: Die Sendung bleibt im Konto sichtbar, 17TRACK
 fragt sie nur nicht mehr ab.
 """
@@ -25,7 +29,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Mapping
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Final
 
 from homeassistant.core import HomeAssistant
@@ -38,6 +42,7 @@ from ..const import (
     CONF_USERNAME,
     ISSUE_API_LOGIN_INVALID,
     SEVENTEENTRACK_ACCOUNT_MAX_ADD,
+    SEVENTEENTRACK_REJECT_RETRY,
     SOURCE_SEVENTEENTRACK_ACCOUNT,
 )
 from ..models import Shipment, ShipmentEvent, ShipmentStatus, SourceRecord
@@ -99,7 +104,15 @@ class SeventeenTrackAccountSource(SeventeenTrackSourceBase):
             excluded_carriers=excluded_carriers,
         )
         self._client = client
-        self._stats = {"added": 0, "rejected": 0, "archived": 0, "fetched": 0}
+        self._stats = {
+            "added": 0,
+            "rejected": 0,
+            "archived": 0,
+            "fetched": 0,
+            "carriers_set": 0,
+        }
+        self._carrier_rejected: dict[str, datetime] = {}
+        """Nummern, bei denen 17TRACK den Zusteller nicht annahm — bis zur Sperrfrist."""
 
     def diagnostics(self) -> dict[str, Any]:
         """Kennzahlen — ohne Zugangsdaten und ohne Nummern."""
@@ -152,6 +165,7 @@ class SeventeenTrackAccountSource(SeventeenTrackSourceBase):
         for number in closed:
             self._note_remote(number, remote[number].carrier, known, TrackingState.FINISHED, now)
 
+        assigned = await self._async_assign_carriers(remote, known, now)
         await self._async_add(self._registration_candidates(known, remote, now), now)
 
         shipments: list[Shipment] = []
@@ -160,7 +174,14 @@ class SeventeenTrackAccountSource(SeventeenTrackSourceBase):
                 continue
             shipment = self._build_shipment(number, package, known, now)
             if shipment is None:
-                self._note_remote(number, package.carrier, known, TrackingState.NOT_FOUND, now)
+                self._note_remote(
+                    number,
+                    package.carrier,
+                    known,
+                    TrackingState.NOT_FOUND,
+                    now,
+                    detail=assigned.get(number),
+                )
                 continue
             shipments.append(shipment)
             self._note_remote(
@@ -198,6 +219,45 @@ class SeventeenTrackAccountSource(SeventeenTrackSourceBase):
             self._stats["archived"] += len(ids)
         else:
             _LOGGER.debug("17TRACK-Konto: Archivieren abgelehnt")
+
+    async def _async_assign_carriers(
+        self, remote: Mapping[str, AccountPackage], known: Mapping[str, Shipment], now: datetime
+    ) -> dict[str, str]:
+        """Den Zusteller festlegen, wo 17TRACK zwischen mehreren schwankt.
+
+        Nur wenn 17TRACK selbst Kandidaten nennt, und nur fuer aktive Sendungen
+        in HA mit bekanntem 17TRACK-Code. Einen von 17TRACK oder in der App
+        festgelegten Zusteller ueberschreibt die Quelle nie. Liefert den Hinweis
+        fuer den Abgleich je Nummer.
+        """
+        retry_before = now - timedelta(seconds=SEVENTEENTRACK_REJECT_RETRY)
+        self._carrier_rejected = {
+            number: when for number, when in self._carrier_rejected.items() if when > retry_before
+        }
+        assigned: dict[str, str] = {}
+        for number, package in remote.items():
+            local = known.get(number)
+            if (
+                package.carrier is not None
+                or not package.carrier_options
+                or package.internal_id is None
+                or local is None
+                or not local.is_active
+                or number in self._carrier_rejected
+            ):
+                continue
+            code = self.mapping.carrier_code_among(local.carrier, package.carrier_options)
+            if code is None:
+                continue
+            result = await self._client.async_set_carrier(package.internal_id, code)
+            if result == CODE_OK:
+                self._stats["carriers_set"] += 1
+                assigned[number] = "carrier_set"
+                continue
+            self._carrier_rejected[number] = now
+            assigned[number] = str(result)
+            _LOGGER.debug("17TRACK-Konto: Zusteller festlegen abgelehnt (%s)", result)
+        return assigned
 
     async def _async_add(self, candidates: list[tuple[str, Shipment]], now: datetime) -> None:
         """Neue, gepruefte Nummern eintragen — eine Anfrage je Nummer, gedeckelt."""

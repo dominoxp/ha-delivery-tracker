@@ -60,6 +60,8 @@ class FakeSeventeenTrackAccount:
         self.archived: dict[str, dict[str, Any]] = {}
         self.invalid: set[str] = set()
         """Nummern, die `AddTrackNo` ablehnt."""
+        self.carrier_refused: set[str] = set()
+        """Nummern, bei denen `SetTrackCarrier` den Zusteller ablehnt."""
         self.session = False
         self.logins = 0
         self.throttle = 0
@@ -80,6 +82,7 @@ class FakeSeventeenTrackAccount:
         *,
         state: int = 10,
         carrier: int = 0,
+        carrier_options: list[int] | None = None,
         remark: str | None = None,
         event: str | None = None,
     ) -> dict[str, Any]:
@@ -89,6 +92,8 @@ class FakeSeventeenTrackAccount:
             "FTrackInfoId": f"id-{self._next_id}",
             "FPackageState": state,
             "FFirstCarrier": carrier,
+            # 17TRACK liefert die Kandidaten als JSON-Text, ohne Kandidaten leer.
+            "FFirstCarrierOptions": str(carrier_options) if carrier_options else "",
             "FRemark": remark,
             "FLastEvent": event,
         }
@@ -157,6 +162,16 @@ class FakeSeventeenTrackAccount:
         if number in self.invalid or number in self.packages:
             return {"Code": CODE_INVALID_NUMBER}
         self.add(number, state=0)
+        return {"Code": 0}
+
+    def _SetTrackCarrier(self, param: Any) -> dict[str, Any]:
+        assert param["SecondCarrier"] == 0
+        row = next(
+            row for row in self.packages.values() if row["FTrackInfoId"] == param["TrackInfoId"]
+        )
+        if row["FTrackNo"] in self.carrier_refused:
+            return {"Code": CODE_INVALID_NUMBER}
+        row.update(FFirstCarrier=param["FirstCarrier"], FFirstCarrierOptions="")
         return {"Code": 0}
 
     def _SetTrackArchived(self, param: Any) -> dict[str, Any]:

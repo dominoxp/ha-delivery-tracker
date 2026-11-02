@@ -502,6 +502,7 @@
         "tracking_last_event": "letztes Ereignis {time}",
         "tracking_pending_quota": "Kontingent aufgebraucht",
         "tracking_pending_limit": "höchstens 10 je Durchlauf",
+        "tracking_carrier_set": "Zusteller bei 17TRACK festgelegt",
         "tracking_code": "Code {code}",
         "tracking_retry": "nächster Versuch {time}"
       }

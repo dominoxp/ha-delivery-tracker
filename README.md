@@ -70,6 +70,11 @@ liegen. Zugestellte Sendungen werden im Konto archiviert bzw. bei der API abgeme
 API kostet jede neu angemeldete Nummer eine Einheit Kontingent; das Konto kennt kein
 Kontingent. Für den privaten Haushalt ist das Konto die naheliegende Wahl.
 
+Passt eine Nummer auf mehrere Zusteller (bei DPD und GLS üblich), legt 17TRACK keinen fest und
+fragt sie nie ab — in der App müsste man den Zusteller von Hand wählen. Das übernimmt die
+Konto-Quelle: Sie setzt im Konto den Zusteller aus Mail bzw. Action, im Abgleich steht dann
+„Zusteller bei 17TRACK festgelegt“. Ein bereits gewählter Zusteller wird nie überschrieben.
+
 Unter **Konfigurieren → 17TRACK-Abgleich prüfen** steht je Quelle, was der letzte Durchlauf mit
 jeder Nummer gemacht hat: wird verfolgt, noch nichts gefunden, gerade eingetragen, wartet,
 abgelehnt (mit nächstem Versuch), Nummer ungültig oder Zusteller abgewählt. Lehnt 17TRACK eine

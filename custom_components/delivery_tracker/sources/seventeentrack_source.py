@@ -142,6 +142,18 @@ class SeventeenTrackMapping:
         codes = self.carriers.get(carrier_id)
         return codes[0] if codes else None
 
+    def carrier_code_among(self, carrier_id: str, options: Iterable[int]) -> int | None:
+        """Der Code dieses Zustellers, bevorzugt einer, den 17TRACK selbst vorschlaegt.
+
+        Steht keiner der eigenen Codes unter den Kandidaten (oder gibt es keine),
+        zaehlt der erste Code wie beim Registrieren.
+        """
+        codes = self.carriers.get(carrier_id)
+        if not codes:
+            return None
+        offered = set(options)
+        return next((code for code in codes if code in offered), codes[0])
+
     def carrier_id(self, code: Any) -> str | None:
         """Die eigene Carrier-ID zu einem 17TRACK-Code."""
         try:

@@ -408,6 +408,8 @@ def _tracking_note(texts: Texts, report: TrackingReport) -> str:
         notes.append(texts.get("tracking_last_event", time=format_dt(texts, report.last_event)))
     if report.detail in ("quota", "limit"):
         notes.append(texts.get(f"tracking_pending_{report.detail}"))
+    elif report.detail == "carrier_set":
+        notes.append(texts.get("tracking_carrier_set"))
     elif report.detail:
         notes.append(texts.get("tracking_code", code=md(report.detail)))
     if report.retry_at is not None:

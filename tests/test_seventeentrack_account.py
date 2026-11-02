@@ -48,6 +48,9 @@ from custom_components.delivery_tracker.sources.seventeentrack_account_source im
     create_source,
     parse_account_time,
 )
+from custom_components.delivery_tracker.sources.seventeentrack_source import (
+    SeventeenTrackMapping,
+)
 from tests.fake_imap import FakeImapServer
 from tests.fake_seventeentrack_account import (
     ACCOUNT_PASSWORD,
@@ -781,3 +784,96 @@ async def test_abgleich_seite_ohne_quelle(hass: HomeAssistant) -> None:
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "no_tracking_sources"
+
+
+# ----------------------------------------------------------------------
+# Zusteller festlegen
+# ----------------------------------------------------------------------
+
+DPD_NUMBER = "01595214941800"
+DPD_OPTIONS = [1161, 100005, 100007, 100010, 100204, 100321, 101108]
+
+
+async def test_mehrdeutige_nummer_bekommt_den_zusteller_aus_ha(
+    hass: HomeAssistant, account: FakeSeventeenTrackAccount
+) -> None:
+    """Ohne Auswahl fragt 17TRACK nie ab — die Quelle waehlt wie in der App."""
+    row = account.add(DPD_NUMBER, state=0, carrier_options=DPD_OPTIONS)
+    source = await make_source(hass, [manual_shipment(DPD_NUMBER, "dpd")])
+
+    assert await source.async_fetch() == []
+    assert account.params("SetTrackCarrier") == [
+        {"FirstCarrier": 100007, "SecondCarrier": 0, "TrackInfoId": row["FTrackInfoId"]}
+    ]
+    (report,) = source.tracking_report() or []
+    assert report.state is TrackingState.NOT_FOUND
+    assert report.detail == "carrier_set"
+    assert source.diagnostics()["carriers_set"] == 1
+
+    # Festgelegt: kein zweites Mal, und der Stand kommt an.
+    account.update(
+        DPD_NUMBER,
+        FPackageState=40,
+        FLastEvent=last_event("2026-11-03 13:24", "Parcel delivered", "Raunheim"),
+    )
+    (fragment,) = await source.async_fetch()
+    assert fragment.id == f"dpd_{DPD_NUMBER}"
+    assert fragment.status is ShipmentStatus.DELIVERED
+    assert len(account.params("SetTrackCarrier")) == 1
+
+
+async def test_festgelegter_zusteller_wird_nicht_ueberschrieben(
+    hass: HomeAssistant, account: FakeSeventeenTrackAccount
+) -> None:
+    """Hat 17TRACK oder der Nutzer gewaehlt, bleibt es dabei."""
+    account.add(DPD_NUMBER, state=0, carrier=100005)
+    source = await make_source(hass, [manual_shipment(DPD_NUMBER, "dpd")])
+
+    await source.async_fetch()
+
+    assert "SetTrackCarrier" not in account.methods()
+
+
+async def test_ohne_kandidaten_oder_code_wird_nichts_festgelegt(
+    hass: HomeAssistant, account: FakeSeventeenTrackAccount
+) -> None:
+    """Noch in der Erkennung, nur bei 17TRACK oder Zusteller ohne Code: nicht anfassen."""
+    account.add(DPD_NUMBER, state=0)
+    account.add("AB12345678XY", state=0, carrier_options=[1161, 100005])
+    account.add("01234567890123", state=0, carrier_options=DPD_OPTIONS)
+    source = await make_source(
+        hass, [manual_shipment(DPD_NUMBER, "dpd"), manual_shipment("AB12345678XY")]
+    )
+
+    await source.async_fetch()
+
+    assert "SetTrackCarrier" not in account.methods()
+
+
+async def test_abgelehnter_zusteller_wird_erst_nach_der_sperrfrist_wiederholt(
+    hass: HomeAssistant, account: FakeSeventeenTrackAccount, freezer: FrozenDateTimeFactory
+) -> None:
+    """Lehnt 17TRACK die Auswahl ab, steht der Code im Abgleich; neuer Versuch nach einem Tag."""
+    account.add(DPD_NUMBER, state=0, carrier_options=DPD_OPTIONS)
+    account.carrier_refused.add(DPD_NUMBER)
+    source = await make_source(hass, [manual_shipment(DPD_NUMBER, "dpd")])
+
+    await source.async_fetch()
+    (report,) = source.tracking_report() or []
+    assert report.detail == "-5"
+
+    await source.async_fetch()
+    assert len(account.params("SetTrackCarrier")) == 1
+
+    freezer.tick(timedelta(days=1, seconds=1))
+    await source.async_fetch()
+    assert len(account.params("SetTrackCarrier")) == 2
+
+
+def test_code_unter_den_kandidaten_geht_vor() -> None:
+    """DHL hat mehrere Codes: Der von 17TRACK vorgeschlagene gewinnt, sonst der erste."""
+    mapping = SeventeenTrackMapping(carriers={"dhl": (7041, 100001, 7044)})
+
+    assert mapping.carrier_code_among("dhl", [190271, 100001]) == 100001
+    assert mapping.carrier_code_among("dhl", [190271]) == 7041
+    assert mapping.carrier_code_among("dpd", [100007]) is None

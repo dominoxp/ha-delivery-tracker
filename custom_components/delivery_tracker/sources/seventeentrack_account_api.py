@@ -97,6 +97,9 @@ class AccountPackage:
     state: int = 0
     """`FPackageState`; die Zuordnung steht unter `account_statuses` in `seventeentrack.yaml`."""
     carrier: int | None = None
+    """`FFirstCarrier`; `None`, solange 17TRACK den Zusteller nicht festgelegt hat."""
+    carrier_options: tuple[int, ...] = ()
+    """`FFirstCarrierOptions` — die Kandidaten, wenn die Nummer zu mehreren Zustellern passt."""
     remark: str | None = None
     """Der Name, den der Nutzer der Sendung in der App gegeben hat."""
     event_time: str | None = None
@@ -126,6 +129,7 @@ class AccountPackage:
             internal_id=str(internal_id) if internal_id else None,
             state=_int(row.get("FPackageState")) or 0,
             carrier=_int(row.get("FFirstCarrier")) or None,
+            carrier_options=_int_list(row.get("FFirstCarrierOptions")),
             remark=_str(row.get("FRemark")),
             event_time=_str(event.get("a")),
             event_text=_str(event.get("z")),
@@ -139,6 +143,18 @@ def _int(value: Any) -> int | None:
         return int(value)
     except TypeError, ValueError:
         return None
+
+
+def _int_list(value: Any) -> tuple[int, ...]:
+    """Zahlenliste, die 17TRACK als JSON-Text liefert (`"[1161, 100007]"`); sonst leer."""
+    if isinstance(value, str) and value:
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return ()
+    if not isinstance(value, list):
+        return ()
+    return tuple(number for item in value if (number := _int(item)) is not None)
 
 
 def _str(value: Any) -> str | None:
@@ -272,6 +288,18 @@ class SeventeenTrackAccountClient:
     async def async_add(self, number: str) -> int:
         """Eine Nummer ins Konto eintragen; liefert den `Code` der Antwort (0 = angenommen)."""
         body = await self._async_call("AddTrackNo", {"TrackNos": [number]})
+        return _int(body.get("Code")) or CODE_OK
+
+    async def async_set_carrier(self, internal_id: str, code: int) -> int:
+        """Den Zusteller einer Sendung festlegen, wie die Auswahl in der App.
+
+        Ohne festgelegten Zusteller fragt 17TRACK eine Nummer, die zu mehreren
+        passt, gar nicht ab. Liefert den `Code` der Antwort (0 = angenommen).
+        """
+        body = await self._async_call(
+            "SetTrackCarrier",
+            {"FirstCarrier": code, "SecondCarrier": 0, "TrackInfoId": internal_id},
+        )
         return _int(body.get("Code")) or CODE_OK
 
     async def async_archive(self, internal_ids: Sequence[str]) -> bool:
