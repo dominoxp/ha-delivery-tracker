@@ -9,6 +9,9 @@
       "active_shipments": {
         "default": "mdi:package-variant-closed"
       },
+      "all_shipments": {
+        "default": "mdi:package-variant"
+      },
       "expected_today": {
         "default": "mdi:calendar-today"
       },

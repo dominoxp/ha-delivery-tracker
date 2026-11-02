@@ -89,6 +89,9 @@ mark_delivered: true # optional: Button „Als zugestellt / abgeholt markieren"
 ```
 
 `entity` muss ein Sensor der Integration sein, also einer mit dem Attribut `shipments`.
+Für aktive und zugestellte Sendungen in einer Karte eignet sich
+`sensor.delivery_tracker_alle_sendungen`: Er enthält alle Sendungen, auch abgeschlossene bis
+zum Ablauf der Aufbewahrungsfrist; mit `statuses` lässt sich die Liste weiter eingrenzen.
 Bei ungültiger Konfiguration zeigt die Karte statt einer leeren Fläche eine Fehlermeldung.
 
 Mit `mark_delivered: true` zeigt die Karte in den aufgeklappten Details jeder noch nicht

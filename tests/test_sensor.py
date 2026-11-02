@@ -162,6 +162,17 @@ async def test_zaehler_mit_testdaten(hass: HomeAssistant, hass_storage: dict[str
     expected = {
         # Mit Termin nach eta_start, ohne Termin danach.
         "active_shipments": ["vormittag", "nachmittag", "morgen", "locker"],
+        # Auch die abgeschlossenen; ohne Termin bei gleicher Aenderung nach ID.
+        "all_shipments": [
+            "vormittag",
+            "nachmittag",
+            "morgen",
+            "gestern",
+            "locker",
+            "zugestellt",
+            "gescheitert",
+            "retour",
+        ],
         "expected_today": ["vormittag", "nachmittag"],
         "out_for_delivery": ["vormittag"],
         "ready_for_pickup": ["locker"],

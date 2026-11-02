@@ -2,7 +2,7 @@
 
 Bewusst keine Entity pro Sendung (siehe `planning.md`). Stattdessen:
 
-- am Haupt-Device sechs Zaehler (aktiv, heute erwartet, in Zustellung,
+- am Haupt-Device sieben Zaehler (aktiv, alle, heute erwartet, in Zustellung,
   abholbereit, heute zugestellt, Probleme), je aktivem Zusteller ein Zaehler
   und zwei Diagnose-Sensoren (letzte Aktualisierung, Zustand der Quellen);
 - je Zielort ein Zaehler an dessen Device.
@@ -85,6 +85,13 @@ COUNTERS: tuple[ShipmentCountDescription, ...] = (
         key="active_shipments",
         translation_key="active_shipments",
         shipments_fn=lambda data, _today: data.active,
+    ),
+    # Auch die abgeschlossenen bis zum Ablauf der Retention: Die Karte zeigt
+    # damit aktive und zugestellte Sendungen in einer Liste.
+    ShipmentCountDescription(
+        key="all_shipments",
+        translation_key="all_shipments",
+        shipments_fn=lambda data, _today: data.shipments,
     ),
     ShipmentCountDescription(
         key="expected_today",
