@@ -312,6 +312,9 @@
       "active_shipments": {
         "name": "Active shipments"
       },
+      "all_shipments": {
+        "name": "All shipments"
+      },
       "expected_today": {
         "name": "Expected today"
       },
