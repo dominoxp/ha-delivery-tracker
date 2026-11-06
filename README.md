@@ -3,22 +3,26 @@
 Home-Assistant-Custom-Integration, die Paket-Benachrichtigungen aus einem IMAP-Postfach
 ausliest, den Zusteller erkennt und den Sendungsstand in Home Assistant bereitstellt.
 
-> **Status:** in Entwicklung. Aktuell steht nur das Grundgerüst (Step 0.1) — die Integration
-> lässt sich anlegen und wieder entfernen, liefert aber noch keine Daten.
+## Funktionsumfang
 
-## Geplanter Funktionsumfang
-
-- **E-Mail-Quelle:** IMAP mit IDLE-Push (Polling als Fallback), Carrier-Erkennung über
-  Absender, Betreff und Trackingnummer.
+- **E-Mail-Quelle:** beliebig viele IMAP-Postfächer, neue Mails per IDLE-Push sofort,
+  sonst im Abfrageintervall. Der Zusteller wird über Absender, Betreff und Trackingnummer
+  erkannt.
 - **Zusteller:** DHL/Deutsche Post, Amazon, AliExpress, DPD, GLS, Hermes, UPS sowie ein
   generischer Fallback — jeder Zusteller ist ein Plugin.
-- **Tracking-Quellen:** modular zuschaltbar, 17TRACK als generischer Fallback (siehe
-  [17TRACK](#17track)).
-- **In Home Assistant:** feste Zähler-Sensoren mit kompakter Sendungsliste als Attribut,
-  eine Action `delivery_tracker.get_shipments` mit vollen Details, eine Kalender-Entity für
-  erwartete Lieferungen und eine mitgelieferte Lovelace-Karte.
+- **Tracking-Quellen:** 17TRACK als Konto (kostenlos) oder API holt den Status direkt
+  vom Zusteller (siehe [17TRACK](#17track)).
+- **Zielorte:** Sendungen werden anhand der Lieferadresse einem Zielort zugeordnet, etwa
+  Zuhause, Büro oder Packstation.
+- **In Home Assistant:** Zähler-Sensoren mit kompakter Sendungsliste als Attribut, ein
+  Kalender für erwartete Lieferungen, Actions, Events für Automationen und eine
+  mitgelieferte Lovelace-Karte.
 
 ## Installation über HACS
+
+[![Repository in HACS öffnen](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dominoxp&repository=ha-delivery-tracker&category=integration)
+
+Oder von Hand:
 
 1. In HACS auf **Integrationen → ⋮ → Benutzerdefinierte Repositories** gehen.
 2. `https://github.com/dominoxp/ha-delivery-tracker` als Kategorie _Integration_ eintragen.
@@ -33,10 +37,44 @@ Home Assistant neu starten. Das Release enthält die fertig gebaute Lovelace-Kar
 stattdessen den Ordner aus einem Git-Checkout kopiert, muss die Karte vorher selbst bauen
 (siehe [Entwicklung](#entwicklung)).
 
+## Einrichtung
+
+[![Integration hinzufügen](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=delivery_tracker)
+
+Beim Hinzufügen bekommt die Integration nur einen Namen. Alles Weitere wird danach unter
+**Einstellungen → Geräte & Dienste → Delivery Tracker** als eigener Eintrag angelegt:
+
+- **Postfach hinzufügen:** Server, Port, Verschlüsselung und Zugangsdaten eines
+  IMAP-Postfachs; die Verbindung wird vor dem Speichern getestet. Danach folgen Ordner
+  (Standard `INBOX`), Push per IDLE, Abfrageintervall (Standard 5 Minuten) und Rückblick
+  in Tagen (Standard 3, höchstens 365): So weit zurück werden beim ersten Abruf ungelesene
+  Mails berücksichtigt, bei „Postfach neu einlesen" alle.
+- **Zieladresse hinzufügen:** woran eine Sendung für diesen Zielort zu erkennen ist —
+  Empfängernamen, Straßen mit Hausnummer, Postleitzahlen, Orte, Packstation- oder
+  Filialnummern, DHL-Postnummern, Empfänger-Mailadressen und freie Schlüsselwörter.
+  Mindestens eine Regel ist nötig, mehrere Einträge je Feld sind Alternativen.
+  `@example.com` steht für die ganze Domain, Plus-Aliase werden erkannt. Nach dem
+  Bearbeiten werden bestehende Sendungen neu zugeordnet.
+- **Tracking-Quelle hinzufügen:** siehe [17TRACK](#17track).
+
+Postfächer, Zielorte und Quellen lassen sich später über ihren Eintrag bearbeiten.
+Lehnt ein Server die Zugangsdaten ab, fordert Home Assistant zur erneuten Anmeldung auf und
+fragt das neue Passwort bzw. den neuen API-Schlüssel ab.
+
+**Konfigurieren → Einstellungen** gilt für alle Postfächer und Quellen:
+
+| Einstellung | Standard | Bedeutung |
+|---|---|---|
+| Aufbewahrung nach Zustellung | 14 Tage | So lange bleiben abgeschlossene Sendungen sichtbar; 0 behält sie unbegrenzt. |
+| Verfall ohne Aktualisierung | 60 Tage | Sendungen ohne Aktualisierung so lange werden entfernt, auch wenn sie nie abgeschlossen wurden; 0 schaltet das ab. |
+| Aktive Zusteller | alle | Mails abgeschalteter Zusteller werden nicht ausgewertet. |
+| Generischer Fallback | an | Erkennt Sendungen unbekannter Zusteller anhand allgemeiner Muster. |
+
 ## Sendungen verwalten
 
 Unter **Einstellungen → Geräte & Dienste → Delivery Tracker → Konfigurieren** gibt es neben
-den Einstellungen zwei weitere Punkte:
+den Einstellungen drei weitere Punkte (der dritte, **17TRACK-Abgleich prüfen**, steht unter
+[17TRACK](#17track)):
 
 - **Sendungen ansehen und verwalten:** alle gespeicherten Sendungen, die mit der ältesten
   Mail zuerst. Jede Zeile nennt Zusteller, Status, Artikel, Zielort, wann die letzte Mail kam
@@ -49,6 +87,8 @@ den Einstellungen zwei weitere Punkte:
 - **Letzte Mails prüfen:** die letzten 100 verarbeiteten Mails je Postfach mit Ergebnis
   (Sendung erkannt, Zusteller erkannt aber keine Sendung, kein Zusteller, Fehler). Damit
   fallen Mails auf, die nicht erkannt wurden, etwa eine Zustellmail in neuem Format.
+  **Postfach neu einlesen** wertet alle Mails im eingestellten Rückblick erneut aus, auch
+  bereits gelesene.
 
 Betreffs und Absender bleiben lokal im Store; die Diagnose-Datei enthält sie nicht.
 
@@ -137,6 +177,83 @@ Unterwegs bekommt das Paket jedes Mal eine neue Nummer. In der Sendungsliste ste
 Kommt zu einer Bestellung nie eine Paketmail, bleibt sie auf *versandt*, bis sie nach der
 eingestellten Frist für veraltete Sendungen von selbst verschwindet.
 
+## Entities
+
+Am Gerät der Integration:
+
+| Sensor | zählt |
+|---|---|
+| Aktive Sendungen | alle noch nicht abgeschlossenen Sendungen |
+| Alle Sendungen | zusätzlich die abgeschlossenen bis zum Ablauf der Aufbewahrung |
+| Heute erwartet | aktive Sendungen, deren Zustellfenster heute liegt |
+| In Zustellung | Status `out_for_delivery` |
+| Abholbereit | Status `ready_for_pickup` |
+| Heute zugestellt | heute zugestellte Sendungen |
+| Probleme | verspätet, Zustellung gescheitert oder auf dem Rückweg |
+
+Dazu je aktivem Zusteller ein Sensor mit dessen aktiven Sendungen und je Zielort ein Sensor
+„Aktive Sendungen" am Gerät des Zielorts. Alle diese Sensoren tragen die kompakte
+Sendungsliste im Attribut `shipments` sowie die Namen der Zusteller (`carriers`) und
+Zielorte (`destinations`).
+
+Als Diagnose kommen **Letzte Aktualisierung** und **Quellen** hinzu. Quellen zeigt den
+schlechtesten Zustand aller Postfächer und Tracking-Quellen (OK, ausstehend, Fehler,
+ausgefallen, Anmeldung abgelehnt), die Details je Quelle stehen im Attribut `sources`.
+
+Der Kalender **Erwartete Lieferungen** trägt jede Sendung mit Termin ein, auch zugestellte
+bis zum Ablauf der Aufbewahrung. Als aktuelles Ereignis zeigt er die laufende oder nächste
+Lieferung.
+
+## Actions
+
+| Action | Zweck |
+|---|---|
+| `delivery_tracker.get_shipments` | Sendungen mit allen Details als Antwort; filterbar nach `status`, `carrier` und `destination` (`unknown` = ohne Zielort), mit `include_events: true` samt Verlauf. Ohne Filter alle aktiven. |
+| `delivery_tracker.add_shipment` | Sendung von Hand anlegen (`tracking_number`, optional `carrier`, `destination`, `description`); eine spätere Mail ergänzt dieselbe Sendung. |
+| `delivery_tracker.remove_shipment` | Sendung per `shipment_id` sofort löschen. |
+| `delivery_tracker.mark_delivered` | Sendung per `shipment_id` sofort auf zugestellt setzen. |
+| `delivery_tracker.refresh` | Quellen sofort abrufen, optional nur eine (`source`, Name oder ID). |
+| `delivery_tracker.test_parser` | Einen Mailtext (`body`, optional `subject`, `sender`) durch alle Zusteller-Plugins schicken und Bewertung, Gewinner und erkannte Felder zurückgeben — zum Bauen neuer Regeln. |
+
+Die `shipment_id` steht im Attribut `shipments` und in der Antwort von `get_shipments`,
+etwa `dhl_00340434161094042557`. Alle Actions nehmen optional `config_entry_id`, wenn
+mehrere Instanzen eingerichtet sind.
+
+```yaml
+action: delivery_tracker.get_shipments
+data:
+  status: [out_for_delivery, ready_for_pickup]
+response_variable: pakete
+```
+
+## Events
+
+Events feuern nur bei einer Änderung, nicht bei jedem Abruf:
+
+| Event | Wann |
+|---|---|
+| `delivery_tracker_shipment_added` | Sendung zum ersten Mal gesehen |
+| `delivery_tracker_shipment_updated` | Status gewechselt, mit `old_status` und `new_status` |
+| `delivery_tracker_shipment_delivered` | zusätzlich, sobald der Status `delivered` wird |
+| `delivery_tracker_tracking_rejected` | 17TRACK hat eine Nummer abgelehnt (siehe [17TRACK](#17track)) |
+
+Die Sendungs-Events enthalten die kompakte Darstellung der Sendung (`id`, `carrier`,
+`tracking_number`, `status`, `status_text`, `eta_start`, `eta_end`, `delivered_at`,
+`destination_id`, `sender`, `description`, `pickup_location`, `pickup_code`,
+`tracking_url`, `last_updated`) und `config_entry_id`.
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: delivery_tracker_shipment_updated
+    event_data:
+      new_status: ready_for_pickup
+actions:
+  - action: notify.notify
+    data:
+      message: "Abholbereit: {{ trigger.event.data.description or trigger.event.data.tracking_number }} — {{ trigger.event.data.pickup_location }}"
+```
+
 ## Lovelace-Karte
 
 Die Integration bringt ihre Karte mit, liefert sie selbst aus und trägt sie beim Start als
@@ -144,6 +261,10 @@ Dashboard-Ressource ein — eine eigene HACS-Installation ist nicht nötig. Nach
 von Home Assistant (und einem Neuladen der Seite im Browser) steht **Delivery Tracker** in
 der Kartenauswahl des Dashboards. Wird die Integration gelöscht, entfernt sie auch die
 Ressource wieder.
+
+| Standard, eine Sendung aufgeklappt | Nach Zielort gruppiert, dunkles Theme |
+|---|---|
+| <img src="docs/screenshots/card-light.png" alt="Karte mit aktiven Sendungen im hellen Theme" width="380"> | <img src="docs/screenshots/card-dark.png" alt="Karte nach Zielort gruppiert im dunklen Theme" width="380"> |
 
 ```yaml
 type: custom:delivery-tracker-card
